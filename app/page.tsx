@@ -8,6 +8,26 @@ const waLink = (tel: string | null | undefined) => {
   return d.length >= 10 ? `https://wa.me/${d}` : null;
 };
 
+const WEEKDAYS = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
+
+/* De 'DD/MM' → { d, w, hoy } para el bloque de fecha de cada visita. */
+function fechaBlock(fecha: string) {
+  const [dd, mm] = (fecha || '').split('/').map((x) => parseInt(x, 10));
+  const now = new Date();
+  const date = new Date(now.getFullYear(), (mm || 1) - 1, dd || 1);
+  const hoy = dd === now.getDate() && mm === now.getMonth() + 1;
+  return { d: String(dd || '').padStart(2, '0'), w: WEEKDAYS[date.getDay()] ?? '', hoy };
+}
+
+/* Estado del lead inferido del último mensaje del hilo. */
+function leadStatus(msg: string): { cls: string; label: string } {
+  const m = (msg || '').toLowerCase();
+  if (/\bderiv|asesor\b/.test(m)) return { cls: 'derivado', label: 'Derivado' };
+  if (/confirmad/.test(m)) return { cls: 'confirmada', label: 'Visita confirmada' };
+  if (/interesa|me interesa|sí me/.test(m)) return { cls: 'interesado', label: 'Interesado' };
+  return { cls: 'consultando', label: 'Consultando' };
+}
+
 async function getData() {
   const [kpis, visitas, leadsRaw] = await Promise.all([
     pool.query(`
@@ -47,84 +67,151 @@ async function getData() {
   return { k: kpis.rows[0], visitas: visitas.rows, leads };
 }
 
+function SunArt() {
+  return (
+    <svg className="hero-art" viewBox="0 0 460 320" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <circle cx="300" cy="196" r="78" fill="#F26B3A" opacity="0.92" />
+      <circle cx="300" cy="196" r="110" stroke="#3A4F60" strokeWidth="1.4" opacity="0.5" />
+      <circle cx="300" cy="196" r="146" stroke="#3A4F60" strokeWidth="1.2" opacity="0.3" />
+      <line x1="40" y1="232" x2="440" y2="232" stroke="#E6EBEF" strokeWidth="1.6" strokeLinecap="round" opacity="0.6" />
+      <line x1="90" y1="258" x2="400" y2="258" stroke="#E6EBEF" strokeWidth="1.6" strokeLinecap="round" opacity="0.35" />
+      <line x1="140" y1="284" x2="360" y2="284" stroke="#E6EBEF" strokeWidth="1.6" strokeLinecap="round" opacity="0.18" />
+    </svg>
+  );
+}
+
 export default async function HomePage() {
   const { k, visitas, leads } = await getData();
   const n = (v: unknown) => Number(v) || 0;
 
+  const hoyStr = new Date()
+    .toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })
+    .toUpperCase();
+
+  const visitasHoy = n(k.visitas_hoy);
+  const derivaciones = n(k.derivaciones);
+  const propActivas = n(k.prop_activas);
+  const alquiler = n(k.prop_alquiler);
+  const venta = n(k.prop_venta);
+  const totalOps = alquiler + venta || 1;
+  const prox = visitas[0];
+
   const kpis = [
-    { label: 'Propiedades activas', value: n(k.prop_activas), icon: 'real_estate_agent' },
-    { label: 'Visitas hoy', value: n(k.visitas_hoy), icon: 'event_available' },
-    { label: 'Visitas próximas', value: n(k.visitas_prox), icon: 'calendar_month' },
-    { label: 'Conversaciones', value: n(k.conversaciones), icon: 'forum' },
-    { label: 'Derivaciones pendientes', value: n(k.derivaciones), icon: 'support_agent' },
+    { label: 'Propiedades activas', value: propActivas, dot: 'ink', hint: `${n(k.prop_destacadas)} destacadas en portada` },
+    { label: 'Visitas hoy', value: visitasHoy, dot: 'accent', hint: `${n(k.visitas_prox)} en los próximos días` },
+    { label: 'Conversaciones', value: n(k.conversaciones), dot: 'success', hint: 'Leads atendidos por el asistente' },
   ];
 
   return (
     <div>
-      <h2 className="page-title">Resumen</h2>
-      <p className="page-sub">Un vistazo al estado de la operación, en vivo.</p>
+      {/* ===== Hero ===== */}
+      <section className="hero">
+        <SunArt />
+        <div className="hero-date">{hoyStr}</div>
+        <h1 className="hero-title">
+          Buen día, equipo.{visitasHoy > 0 ? ` Hoy hay ${visitasHoy} ${visitasHoy === 1 ? 'visita' : 'visitas'} en agenda.` : ' Hoy no hay visitas en agenda.'}
+        </h1>
+        {prox && (
+          <p className="hero-next">
+            Próxima visita: <b>{prox.propiedad_titulo}</b> con {prox.nombre_cliente} · {prox.fecha} a las {prox.hora} hs.
+          </p>
+        )}
+        <div className="hero-ctas">
+          <a className="cta cta-solid" href="/visitas">Ver agenda de hoy</a>
+          {derivaciones > 0 && (
+            <a className="cta cta-outline" href="/chats">
+              Revisar {derivaciones} {derivaciones === 1 ? 'derivación' : 'derivaciones'}
+            </a>
+          )}
+        </div>
+      </section>
 
+      {/* ===== KPIs ===== */}
       <div className="stat-grid">
         {kpis.map((s) => (
           <div className="stat-card" key={s.label}>
-            <span className="material-symbols-outlined">{s.icon}</span>
-            <span className="label">{s.label}</span>
+            <span className="label"><span className={`dot ${s.dot}`} />{s.label}</span>
             <span className="value">{s.value}</span>
+            <span className="hint">{s.hint}</span>
           </div>
         ))}
+        <a className="stat-card action" href="/chats">
+          <span className="label"><span className="dot" />Derivaciones pendientes</span>
+          <span className="value">{derivaciones}</span>
+          <span className="hint">Clientes esperando un asesor →</span>
+        </a>
       </div>
 
-      <div className="card" style={{ marginBottom: 20 }}>
-        <h3 className="dash-card-title"><span className="material-symbols-outlined">inventory_2</span> Cartera disponible</h3>
-        <p className="dash-card-sub">Distribución de las {n(k.prop_activas)} propiedades publicadas.</p>
-        <div className="dash-split">
-          <span className="dash-pill"><b>{n(k.prop_alquiler)}</b> en alquiler</span>
-          <span className="dash-pill"><b>{n(k.prop_venta)}</b> en venta</span>
-          <span className="dash-pill"><b>{n(k.prop_destacadas)}</b> destacadas</span>
+      {/* ===== Cartera ===== */}
+      <div className="card" style={{ marginBottom: 24 }}>
+        <div className="cartera-head">
+          <div>
+            <h3 className="dash-card-title">Cartera disponible</h3>
+            <p className="dash-card-sub">Distribución de las {propActivas} propiedades publicadas.</p>
+          </div>
+          <a className="cartera-link" href="/propiedades">Ver propiedades →</a>
+        </div>
+        <div className="cartera-bar">
+          <div className="cartera-seg ink" style={{ width: `${(alquiler / totalOps) * 100}%` }} />
+          <div className="cartera-seg venta" style={{ width: `${(venta / totalOps) * 100}%` }} />
+        </div>
+        <div className="cartera-legend">
+          <span className="leg"><span className="sw ink" /><span className="n">{alquiler}</span> en alquiler</span>
+          <span className="leg"><span className="sw venta" /><span className="n">{venta}</span> en venta</span>
+          <span className="leg"><span className="star material-symbols-outlined">star</span><span className="n">{n(k.prop_destacadas)}</span> destacadas</span>
         </div>
       </div>
 
+      {/* ===== Paneles ===== */}
       <div className="dash-grid">
         <div className="card">
-          <h3 className="dash-card-title"><span className="material-symbols-outlined">event</span> Próximas visitas</h3>
+          <h3 className="dash-card-title">Próximas visitas</h3>
           <p className="dash-card-sub">Agenda confirmada de los próximos días.</p>
           {visitas.length === 0 && <div className="dash-empty">No hay visitas próximas confirmadas.</div>}
-          <ul className="dash-list">
-            {visitas.map((v, i) => {
-              const wa = waLink(v.telefono);
-              return (
-                <li key={i}>
-                  <div className="main">
-                    <div className="t1">{v.propiedad_titulo || 'Visita'}</div>
-                    <div className="t2">{v.nombre_cliente || 'Sin nombre'} · {v.telefono || '—'}</div>
-                  </div>
-                  <div className="r">{v.fecha} · {v.hora} hs</div>
-                  {wa && (
-                    <a className="wa-ico" href={wa} target="_blank" rel="noreferrer" title="Contactar por WhatsApp">
-                      <span className="material-symbols-outlined">chat</span>
-                    </a>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+          {visitas.map((v, i) => {
+            const fb = fechaBlock(v.fecha);
+            const wa = waLink(v.telefono);
+            return (
+              <div className="visita-row" key={i}>
+                <div className={`visita-date${fb.hoy ? ' hoy' : ''}`}>
+                  <span className="d">{fb.d}</span>
+                  <span className="w">{fb.hoy ? 'HOY' : fb.w}</span>
+                </div>
+                <div className="visita-main">
+                  <div className="visita-t1">{v.propiedad_titulo || 'Visita'}</div>
+                  <div className="visita-t2">{v.nombre_cliente || 'Sin nombre'} · {v.hora} hs</div>
+                </div>
+                {wa && (
+                  <a className="visita-chat" href={wa} target="_blank" rel="noreferrer" title="Contactar por WhatsApp">
+                    <span className="material-symbols-outlined">chat</span>
+                  </a>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         <div className="card">
-          <h3 className="dash-card-title"><span className="material-symbols-outlined">mark_chat_unread</span> Últimas conversaciones</h3>
+          <h3 className="dash-card-title">Últimas conversaciones</h3>
           <p className="dash-card-sub">Los leads más recientes que atendió el asistente.</p>
           {leads.length === 0 && <div className="dash-empty">Todavía no hay conversaciones.</div>}
-          <ul className="dash-list">
-            {leads.map((l, i) => (
-              <li key={i}>
-                <div className="main">
-                  <div className="t1">{l.display}</div>
-                  <div className="t2">{l.message}</div>
+          {leads.map((l, i) => {
+            const st = leadStatus(l.message);
+            const initial = String(l.display || '?').trim().charAt(0).toUpperCase();
+            return (
+              <div className="conv-row" key={i}>
+                <div className={`conv-av v${i % 3}`}>{initial}</div>
+                <div className="conv-main">
+                  <div className="conv-head">
+                    <span className="conv-name">{l.display}</span>
+                    <span className={`cstatus ${st.cls}`}>{st.label}</span>
+                  </div>
+                  <div className="conv-msg">{l.message}</div>
                 </div>
-                <div className="r">{l.cuando}</div>
-              </li>
-            ))}
-          </ul>
+                <span className="conv-time">{l.cuando}</span>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
