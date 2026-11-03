@@ -33,7 +33,7 @@ export type Propiedad = {
 const TIPOS = ['departamento', 'casa', 'ph', 'local'];
 const OPERACIONES = ['venta', 'alquiler', 'alquiler_temp'];
 const OPERACION_LABEL: Record<string, string> = {
-  venta: 'Venta', alquiler: 'Alquiler', alquiler_temp: 'Alquiler temporario',
+  venta: 'Venta', alquiler: 'Alquiler', alquiler_temp: 'Alquiler temp.',
 };
 const TIPO_LABEL: Record<string, string> = {
   departamento: 'Departamento', casa: 'Casa', ph: 'PH', local: 'Local',
@@ -56,14 +56,27 @@ function fotosDe(p: Propiedad): string[] {
   return Array.from(new Set(lista));
 }
 
+/* Ilustración de respaldo (casa + atardecer) cuando la propiedad no tiene fotos. */
+function HouseIllus({ tone }: { tone: 'ink' | 'rent' }) {
+  const linea = tone === 'ink' ? '#E6EBEF' : '#0F1E2A';
+  const sol = tone === 'ink' ? '#F26B3A' : '#FFFFFF';
+  return (
+    <svg className="prop-illus" viewBox="0 0 360 210" fill="none" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M204 150 A46 46 0 0 1 296 150 Z" fill={sol} />
+      <line x1="24" y1="150" x2="336" y2="150" stroke={linea} strokeWidth="2" strokeLinecap="round" opacity="0.7" />
+      <line x1="60" y1="172" x2="300" y2="172" stroke={linea} strokeWidth="2" strokeLinecap="round" opacity="0.35" />
+      <path d="M84 150 L84 92 L112 66 L140 92 L140 150" stroke={linea} strokeWidth="2.2" strokeLinejoin="round" />
+      <path d="M104 150 L104 116 L122 116 L122 150" stroke={linea} strokeWidth="2.2" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function Galeria({ fotos, alt }: { fotos: string[]; alt: string }) {
   const [i, setI] = useState(0);
   const [rotas, setRotas] = useState<Set<string>>(new Set());
   const visibles = fotos.filter((f) => !rotas.has(f));
 
-  if (visibles.length === 0) {
-    return <div className="galeria galeria-vacia"><span>Sin fotos</span></div>;
-  }
+  if (visibles.length === 0) return null;
   const actual = Math.min(i, visibles.length - 1);
   const mover = (d: number) => setI((actual + d + visibles.length) % visibles.length);
 
@@ -76,6 +89,7 @@ function Galeria({ fotos, alt }: { fotos: string[]; alt: string }) {
         loading="lazy"
         onError={() => setRotas((r) => new Set(r).add(visibles[actual]))}
       />
+      <span className="prop-count">{actual + 1}/{visibles.length}</span>
       {visibles.length > 1 && (
         <>
           <button className="galeria-nav prev" onClick={() => mover(-1)} aria-label="Foto anterior">‹</button>
@@ -90,7 +104,6 @@ function Galeria({ fotos, alt }: { fotos: string[]; alt: string }) {
               />
             ))}
           </div>
-          <span className="galeria-count">{actual + 1}/{visibles.length}</span>
         </>
       )}
     </div>
@@ -100,8 +113,10 @@ function Galeria({ fotos, alt }: { fotos: string[]; alt: string }) {
 function PropiedadCard({ p, onToggle, onEditar }: {
   p: Propiedad; onToggle: () => void; onEditar: () => void;
 }) {
+  const esVenta = p.operacion === 'venta';
+  const fotos = fotosDe(p);
   const feats = [
-    p.superficie_m2 != null && `${fmt(p.superficie_m2)} m² tot.`,
+    p.superficie_m2 != null && `${fmt(p.superficie_m2)} m²`,
     p.ambientes != null && `${p.ambientes} amb.`,
     p.dormitorios != null && `${p.dormitorios} dorm.`,
     p.banos != null && `${p.banos} ${p.banos === 1 ? 'baño' : 'baños'}`,
@@ -110,9 +125,12 @@ function PropiedadCard({ p, onToggle, onEditar }: {
 
   return (
     <article className={`prop-card${p.disponible ? '' : ' off'}${p.destacado ? ' destacada' : ''}`}>
-      <div className="prop-media">
-        <Galeria fotos={fotosDe(p)} alt={p.titulo} />
+      <div className={`prop-media${esVenta ? '' : ' rent'}`}>
+        {fotos.length > 0 ? <Galeria fotos={fotos} alt={p.titulo} /> : <HouseIllus tone={esVenta ? 'ink' : 'rent'} />}
         <span className={`prop-op op-${p.operacion}`}>{OPERACION_LABEL[p.operacion] ?? p.operacion}</span>
+        {p.destacado && (
+          <span className="prop-dest"><span className="material-symbols-outlined">star</span>Destacado</span>
+        )}
         {!p.disponible && <span className="prop-nodisp">No disponible</span>}
       </div>
 
@@ -120,52 +138,44 @@ function PropiedadCard({ p, onToggle, onEditar }: {
         <div className="prop-top">
           <div>
             <div className="prop-precio">{precioTexto(p)}</div>
-            <div className="prop-expensas">
-              {p.expensas == null ? <>Expensas: <Dato>{''}</Dato></> : `+ $ ${fmt(p.expensas)} expensas`}
-            </div>
+            {p.expensas != null && <div className="prop-expensas">+ $ {fmt(p.expensas)} expensas</div>}
           </div>
           <span className={`badge ${p.disponible ? 'ok' : 'off'}`}>
-            {p.disponible ? 'Disponible' : 'No disponible'}
+            {p.disponible ? 'Disponible' : 'No disp.'}
           </span>
+        </div>
+
+        <h3 className="prop-dir">{p.direccion}</h3>
+        <div className="prop-barrio">
+          {[p.barrio, p.ciudad].filter(Boolean).join(', ')} · {TIPO_LABEL[p.tipo] ?? p.tipo}
         </div>
 
         {feats.length > 0 && (
           <ul className="prop-feats">{feats.map((f) => <li key={f}>{f}</li>)}</ul>
         )}
 
-        <h3 className="prop-dir">{p.direccion}</h3>
-        <div className="prop-barrio">{[p.barrio, p.ciudad].filter(Boolean).join(', ')}</div>
         {p.descripcion && <p className="prop-desc">{p.descripcion}</p>}
 
         <div className="prop-foot">
-          <div className="prop-meta">
-            <span className="prop-tipo">{TIPO_LABEL[p.tipo] ?? p.tipo}</span>
-            {p.destacado && <span className="prop-star">★ Destacado</span>}
-            {p.codigo_aviso && <span className="prop-cod">Cód. {p.codigo_aviso}</span>}
-          </div>
-          <div className="prop-acciones">
+          <div className="prop-cod"><b>Cód.</b>{p.codigo_aviso || '—'}</div>
+          <div className="prop-foot-actions">
             {p.url_publica && (
-              <a className="btn" href={p.url_publica} target="_blank" rel="noopener noreferrer">
+              <a className="prop-pub" href={p.url_publica} target="_blank" rel="noopener noreferrer">
                 Ver publicación ↗
               </a>
             )}
-            <button className="btn" onClick={onToggle}>
-              {p.disponible ? 'Marcar no disp.' : 'Marcar disp.'}
-            </button>
-            <button className="btn btn-primary" onClick={onEditar}>Editar</button>
+            <button className="btn btn-ink btn-sm" onClick={onEditar}>Editar</button>
           </div>
+        </div>
+
+        <div className="prop-manage">
+          <button className="btn btn-sm" onClick={onToggle}>
+            {p.disponible ? 'Marcar no disponible' : 'Marcar disponible'}
+          </button>
         </div>
       </div>
     </article>
   );
-}
-
-// Muestra un dato faltante como tal, no como vacío (HU-02 CA-3)
-function Dato({ children }: { children: React.ReactNode }) {
-  if (children === null || children === undefined || children === '') {
-    return <span className="badge sin-dato">sin dato</span>;
-  }
-  return <>{children}</>;
 }
 
 export default function PropiedadesClient({ inicial }: { inicial: Propiedad[] }) {
@@ -222,7 +232,6 @@ export default function PropiedadesClient({ inicial }: { inicial: Propiedad[] })
       ...form,
       precio: num(form.precio), ambientes: num(form.ambientes), dormitorios: num(form.dormitorios),
       banos: num(form.banos), superficie_m2: num(form.superficie_m2), expensas: num(form.expensas),
-      // La primera imagen de la lista es la principal
       imagen_principal: null,
     };
     const url = editId ? `/api/propiedades/${editId}` : '/api/propiedades';
@@ -247,14 +256,17 @@ export default function PropiedadesClient({ inicial }: { inicial: Propiedad[] })
 
   return (
     <div>
-      <div className="prop-summary">
-        <div className="item"><span className="n">{inicial.length}</span><span className="k">Propiedades</span></div>
-        <div className="sep" />
-        <div className="item"><span className="n">{disponibles}</span><span className="k">Disponibles</span></div>
-        <div className="sep" />
-        <div className="item"><span className="n">{enAlquiler}</span><span className="k">En alquiler</span></div>
-        <div className="sep" />
-        <div className="item"><span className="n">{enVenta}</span><span className="k">En venta</span></div>
+      <div className="phero">
+        <div>
+          <div className="phero-kick">Cartera publicada</div>
+          <h2 className="phero-title">Propiedades</h2>
+        </div>
+        <div className="phero-stats">
+          <div className="pstat"><div className="n">{inicial.length}</div><div className="k">Total</div></div>
+          <div className="pstat"><div className="n">{disponibles}</div><div className="k">Disponibles</div></div>
+          <div className="pstat light"><div className="n">{enAlquiler}</div><div className="k">En alquiler</div></div>
+          <div className="pstat accent"><div className="n">{enVenta}</div><div className="k">En venta</div></div>
+        </div>
       </div>
 
       <div className="toolbar prop-toolbar">
@@ -268,7 +280,7 @@ export default function PropiedadesClient({ inicial }: { inicial: Propiedad[] })
         <input
           className="prop-search"
           type="search"
-          placeholder="Buscar por dirección, barrio o código…"
+          placeholder="Dirección, barrio o código…"
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
         />
@@ -282,10 +294,13 @@ export default function PropiedadesClient({ inicial }: { inicial: Propiedad[] })
           <option value="precio_desc">Precio ↓</option>
         </select>
         <span className="muted">{filtradas.length} de {inicial.length}</span>
+      </div>
+
+      <div className="prop-new-row">
         <button className="btn btn-primary" onClick={abrirNueva}>+ Nueva propiedad</button>
       </div>
 
-      <div className="prop-list">
+      <div className="prop-grid">
         {filtradas.map((p) => (
           <PropiedadCard
             key={p.id}

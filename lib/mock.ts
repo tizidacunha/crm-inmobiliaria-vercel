@@ -92,7 +92,7 @@ function ultimosPorUsuario(): Row[] {
 export function ultimasConversaciones(n: number): Row[] {
   return ultimosPorUsuario().slice(0, n).map((c) => {
     const t = new Date(c.timestamp as string);
-    const cuando = `${String(t.getDate()).padStart(2, '0')}/${String(t.getMonth() + 1).padStart(2, '0')} ${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
+    const cuando = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
     return { user_id: c.user_id, user_name: c.user_name, message: c.message, cuando };
   });
 }

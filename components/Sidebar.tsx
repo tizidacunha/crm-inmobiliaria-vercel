@@ -65,7 +65,7 @@ export default function Sidebar({ counts = {} }: { counts?: Record<string, numbe
           <span className="status-dot ok" />
           Asistente operativo
         </div>
-        <div className="st">Bot de WhatsApp conectado</div>
+        <div className="st">El bot de WhatsApp está respondiendo leads en este momento.</div>
       </div>
     </aside>
   );

@@ -9,10 +9,5 @@ export default async function AsesoresPage() {
     FROM public.asesores
     ORDER BY activo DESC, nombre ASC
   `);
-  return (
-    <div>
-      <h2 className="page-title">Asesores</h2>
-      <AsesoresClient inicial={rows as Asesor[]} />
-    </div>
-  );
+  return <AsesoresClient inicial={rows as Asesor[]} />;
 }

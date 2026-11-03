@@ -15,6 +15,12 @@ export type Asesor = {
 
 const vacio = { nombre: '', email: '', telefono: '', sucursal: '', zonas: '', activo: true };
 
+function iniciales(nombre: string) {
+  const partes = String(nombre || '').trim().split(/\s+/).filter(Boolean);
+  if (partes.length >= 2) return (partes[0][0] + partes[1][0]).toUpperCase();
+  return (partes[0]?.slice(0, 2) || '?').toUpperCase();
+}
+
 export default function AsesoresClient({ inicial }: { inicial: Asesor[] }) {
   const router = useRouter();
   const [form, setForm] = useState<Record<string, unknown> | null>(null);
@@ -53,49 +59,59 @@ export default function AsesoresClient({ inicial }: { inicial: Asesor[] }) {
     router.refresh();
   }
 
+  const waLink = (tel: string | null) => {
+    const d = (tel ?? '').replace(/\D/g, '');
+    return d.length >= 8 ? `https://wa.me/${d}` : null;
+  };
+
   return (
     <div>
       <div className="toolbar">
-        <span className="muted">{inicial.filter((a) => a.activo).length} activos · {inicial.length} en total</span>
+        <div>
+          <h2 className="page-title" style={{ marginBottom: 2 }}>Equipo de asesores</h2>
+          <p className="page-sub" style={{ margin: 0 }}>
+            {inicial.filter((a) => a.activo).length} activos · {inicial.length} en total
+          </p>
+        </div>
         <button className="btn btn-primary" onClick={abrirNuevo}>+ Nuevo asesor</button>
       </div>
 
-      <div className="card table-card">
-        <table className="tabla">
-          <thead>
-            <tr><th>Nombre</th><th>Sucursal</th><th>Zonas</th><th>Contacto</th><th>Estado</th><th></th></tr>
-          </thead>
-          <tbody>
-            {inicial.map((a) => (
-              <tr key={a.id} className={a.activo ? '' : 'row-off'}>
-                <td>{a.nombre}</td>
-                <td>{a.sucursal}</td>
-                <td>{(a.zonas || []).map((z) => <span key={z} className="chip">{z}</span>)}</td>
-                <td className="muted">
-                  {a.email || '—'}
-                  {a.telefono && (
-                    <>
-                      <br />
-                      <a
-                        href={`https://wa.me/${a.telefono.replace(/\D/g, '')}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={{ color: 'var(--primary)', fontWeight: 600 }}
-                      >
-                        {a.telefono} · WhatsApp ↗
-                      </a>
-                    </>
-                  )}
-                </td>
-                <td><span className={`badge ${a.activo ? 'ok' : 'off'}`}>{a.activo ? 'Activo' : 'Baja'}</span></td>
-                <td className="acciones">
-                  <button className="btn btn-sm" onClick={() => abrirEditar(a)}>Editar</button>
-                  {a.activo && <button className="btn btn-sm" onClick={() => darDeBaja(a)}>Dar de baja</button>}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="asesor-grid">
+        {inicial.map((a, i) => {
+          const wa = waLink(a.telefono);
+          return (
+            <article key={a.id} className={`asesor-card${a.activo ? '' : ' off'}`}>
+              <div className="asesor-head">
+                <div className={`asesor-av${a.activo && i === 0 ? ' a0' : ''}`}>{iniciales(a.nombre)}</div>
+                <div className="asesor-id">
+                  <div className="asesor-name">{a.nombre}</div>
+                  <div className="asesor-suc">Sucursal {a.sucursal}</div>
+                </div>
+                <span className={`badge ${a.activo ? 'activo' : 'baja'}`}>{a.activo ? 'Activo' : 'Baja'}</span>
+              </div>
+
+              <div className="asesor-zonas-k">Zonas</div>
+              <div className="asesor-zonas">
+                {(a.zonas || []).map((z) => <span key={z} className="zona-chip">{z}</span>)}
+                {(!a.zonas || a.zonas.length === 0) && <span className="muted" style={{ fontSize: 13 }}>Sin zonas asignadas</span>}
+              </div>
+
+              <div className="asesor-contact">
+                <span className="asesor-mail">{a.email || '—'}</span>
+                {wa && (
+                  <a className="asesor-wa" href={wa} target="_blank" rel="noreferrer">
+                    <span className="material-symbols-outlined">chat</span>WhatsApp
+                  </a>
+                )}
+              </div>
+
+              <div className="asesor-actions">
+                <button className="btn btn-ink btn-sm" onClick={() => abrirEditar(a)}>Editar</button>
+                {a.activo && <button className="btn btn-sm" onClick={() => darDeBaja(a)}>Dar de baja</button>}
+              </div>
+            </article>
+          );
+        })}
       </div>
 
       {form && (

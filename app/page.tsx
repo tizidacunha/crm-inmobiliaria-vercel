@@ -9,6 +9,7 @@ const waLink = (tel: string | null | undefined) => {
 };
 
 const WEEKDAYS = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
 /* De 'DD/MM' → { d, w, hoy } para el bloque de fecha de cada visita. */
 function fechaBlock(fecha: string) {
@@ -19,6 +20,15 @@ function fechaBlock(fecha: string) {
   return { d: String(dd || '').padStart(2, '0'), w: WEEKDAYS[date.getDay()] ?? '', hoy };
 }
 
+/* 'DD/MM' → "viernes 7" (día de la semana + número) para hints. */
+function fechaLarga(fecha: string) {
+  const [dd, mm] = (fecha || '').split('/').map((x) => parseInt(x, 10));
+  if (!dd) return '';
+  const d = new Date(new Date().getFullYear(), (mm || 1) - 1, dd);
+  const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+  return `${dias[d.getDay()]} ${dd}`;
+}
+
 /* Estado del lead inferido del último mensaje del hilo. */
 function leadStatus(msg: string): { cls: string; label: string } {
   const m = (msg || '').toLowerCase();
@@ -26,6 +36,15 @@ function leadStatus(msg: string): { cls: string; label: string } {
   if (/confirmad/.test(m)) return { cls: 'confirmada', label: 'Visita confirmada' };
   if (/interesa|me interesa|sí me/.test(m)) return { cls: 'interesado', label: 'Interesado' };
   return { cls: 'consultando', label: 'Consultando' };
+}
+
+/* Iniciales de 2 letras a partir del nombre (o del teléfono). */
+function iniciales(nombre: string) {
+  const s = String(nombre || '').trim();
+  const partes = s.split(/\s+/).filter(Boolean);
+  if (partes.length >= 2) return (partes[0][0] + partes[1][0]).toUpperCase();
+  const limpio = s.replace(/[^A-Za-zÀ-ÿ0-9]/g, '');
+  return (limpio.slice(0, 2) || '?').toUpperCase();
 }
 
 async function getData() {
@@ -53,7 +72,7 @@ async function getData() {
         SELECT DISTINCT ON (session_id) session_id, user_id, user_name, message, timestamp
         FROM public.conversaciones_inmobiliaria ORDER BY session_id, timestamp DESC
       )
-      SELECT user_id, user_name, message, to_char(timestamp,'DD/MM HH24:MI') AS cuando
+      SELECT user_id, user_name, message, to_char(timestamp,'HH24:MI') AS cuando
       FROM ult ORDER BY timestamp DESC LIMIT 6
     `),
   ]);
@@ -69,13 +88,16 @@ async function getData() {
 
 function SunArt() {
   return (
-    <svg className="hero-art" viewBox="0 0 460 320" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <circle cx="300" cy="196" r="78" fill="#F26B3A" opacity="0.92" />
-      <circle cx="300" cy="196" r="110" stroke="#3A4F60" strokeWidth="1.4" opacity="0.5" />
-      <circle cx="300" cy="196" r="146" stroke="#3A4F60" strokeWidth="1.2" opacity="0.3" />
-      <line x1="40" y1="232" x2="440" y2="232" stroke="#E6EBEF" strokeWidth="1.6" strokeLinecap="round" opacity="0.6" />
-      <line x1="90" y1="258" x2="400" y2="258" stroke="#E6EBEF" strokeWidth="1.6" strokeLinecap="round" opacity="0.35" />
-      <line x1="140" y1="284" x2="360" y2="284" stroke="#E6EBEF" strokeWidth="1.6" strokeLinecap="round" opacity="0.18" />
+    <svg className="hero-art" viewBox="0 0 520 300" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      {/* líneas de horizonte */}
+      <line x1="40" y1="210" x2="505" y2="210" stroke="#E6EBEF" strokeWidth="1.6" strokeLinecap="round" opacity="0.55" />
+      <line x1="95" y1="236" x2="470" y2="236" stroke="#E6EBEF" strokeWidth="1.6" strokeLinecap="round" opacity="0.32" />
+      <line x1="150" y1="262" x2="430" y2="262" stroke="#E6EBEF" strokeWidth="1.6" strokeLinecap="round" opacity="0.16" />
+      {/* arcos concéntricos */}
+      <path d="M185 210 A175 175 0 0 1 535 210" stroke="#3A4F60" strokeWidth="1.3" opacity="0.32" />
+      <path d="M225 210 A135 135 0 0 1 495 210" stroke="#3A4F60" strokeWidth="1.3" opacity="0.5" />
+      {/* sol semicírculo sobre el horizonte */}
+      <path d="M265 210 A95 95 0 0 1 455 210 Z" fill="#F26B3A" />
     </svg>
   );
 }
@@ -89,6 +111,7 @@ export default async function HomePage() {
     .toUpperCase();
 
   const visitasHoy = n(k.visitas_hoy);
+  const visitasProx = n(k.visitas_prox);
   const derivaciones = n(k.derivaciones);
   const propActivas = n(k.prop_activas);
   const alquiler = n(k.prop_alquiler);
@@ -96,10 +119,14 @@ export default async function HomePage() {
   const totalOps = alquiler + venta || 1;
   const prox = visitas[0];
 
+  const primeraHoy = visitas.find((v) => fechaBlock(v.fecha).hoy)?.hora;
+  const ultimaProx = visitas.length ? fechaLarga(visitas[visitas.length - 1].fecha) : '';
+
   const kpis = [
-    { label: 'Propiedades activas', value: propActivas, dot: 'ink', hint: `${n(k.prop_destacadas)} destacadas en portada` },
-    { label: 'Visitas hoy', value: visitasHoy, dot: 'accent', hint: `${n(k.visitas_prox)} en los próximos días` },
-    { label: 'Conversaciones', value: n(k.conversaciones), dot: 'success', hint: 'Leads atendidos por el asistente' },
+    { label: 'Propiedades activas', value: propActivas, dot: 'ink', hint: `${alquiler} alquiler · ${venta} venta` },
+    { label: 'Visitas hoy', value: visitasHoy, dot: 'accent', hint: primeraHoy ? `Primera a las ${primeraHoy}` : 'Sin visitas hoy' },
+    { label: 'Visitas próximas', value: visitasProx, dot: 'ink', hint: ultimaProx ? `Hasta el ${ultimaProx}` : 'Agenda despejada' },
+    { label: 'Conversaciones', value: n(k.conversaciones), dot: 'success', hint: 'Atendidas por el bot' },
   ];
 
   return (
@@ -109,11 +136,12 @@ export default async function HomePage() {
         <SunArt />
         <div className="hero-date">{hoyStr}</div>
         <h1 className="hero-title">
-          Buen día, equipo.{visitasHoy > 0 ? ` Hoy hay ${visitasHoy} ${visitasHoy === 1 ? 'visita' : 'visitas'} en agenda.` : ' Hoy no hay visitas en agenda.'}
+          Buen día, equipo.<br />
+          {visitasHoy > 0 ? `Hoy hay ${visitasHoy} ${visitasHoy === 1 ? 'visita' : 'visitas'} en agenda.` : 'Hoy no hay visitas en agenda.'}
         </h1>
         {prox && (
           <p className="hero-next">
-            Próxima visita: <b>{prox.propiedad_titulo}</b> con {prox.nombre_cliente} · {prox.fecha} a las {prox.hora} hs.
+            Próxima: <b>{prox.hora} hs</b> · {prox.propiedad_titulo} con {prox.nombre_cliente}.
           </p>
         )}
         <div className="hero-ctas">
@@ -130,15 +158,17 @@ export default async function HomePage() {
       <div className="stat-grid">
         {kpis.map((s) => (
           <div className="stat-card" key={s.label}>
-            <span className="label"><span className={`dot ${s.dot}`} />{s.label}</span>
+            <span className={`kdot ${s.dot}`} />
+            <span className="label">{s.label}</span>
             <span className="value">{s.value}</span>
             <span className="hint">{s.hint}</span>
           </div>
         ))}
         <a className="stat-card action" href="/chats">
-          <span className="label"><span className="dot" />Derivaciones pendientes</span>
+          <span className="kdot" />
+          <span className="label">Derivaciones</span>
           <span className="value">{derivaciones}</span>
-          <span className="hint">Clientes esperando un asesor →</span>
+          <span className="hint">Requiere un asesor</span>
         </a>
       </div>
 
@@ -197,10 +227,10 @@ export default async function HomePage() {
           {leads.length === 0 && <div className="dash-empty">Todavía no hay conversaciones.</div>}
           {leads.map((l, i) => {
             const st = leadStatus(l.message);
-            const initial = String(l.display || '?').trim().charAt(0).toUpperCase();
+            const cls = i === leads.length - 1 ? 'v1' : 'v0';
             return (
               <div className="conv-row" key={i}>
-                <div className={`conv-av v${i % 3}`}>{initial}</div>
+                <div className={`conv-av ${cls}`}>{iniciales(l.display)}</div>
                 <div className="conv-main">
                   <div className="conv-head">
                     <span className="conv-name">{l.display}</span>

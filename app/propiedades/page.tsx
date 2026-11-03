@@ -13,10 +13,5 @@ export default async function PropiedadesPage() {
     FROM public.propiedades
     ORDER BY destacado DESC, creado_en DESC
   `);
-  return (
-    <div>
-      <h2 className="page-title">Propiedades</h2>
-      <PropiedadesClient inicial={rows as Propiedad[]} />
-    </div>
-  );
+  return <PropiedadesClient inicial={rows as Propiedad[]} />;
 }

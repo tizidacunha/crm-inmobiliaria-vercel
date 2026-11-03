@@ -17,11 +17,13 @@ type Visita = {
 };
 
 const COLORS: Record<string, { bg: string; border: string; text: string }> = {
-  confirmada: { bg: '#ecfdf5', border: '#a7f3d0', text: '#047857' },
-  cancelada: { bg: '#fef2f2', border: '#fecaca', text: '#b91c1c' },
-  pendiente: { bg: '#fef3c7', border: '#fde68a', text: '#b45309' },
+  confirmada: { bg: '#E7EAED', border: '#0F1E2A', text: '#0F1E2A' },
+  hoy: { bg: '#FDE6DB', border: '#F26B3A', text: '#B8441A' },
+  cancelada: { bg: '#EEF0F2', border: '#C7CCD1', text: '#6B7280' },
+  pendiente: { bg: '#FDE6DB', border: '#F0B79A', text: '#8F3212' },
 };
-const colorDe = (estado: string) => COLORS[estado] ?? COLORS.pendiente;
+const colorDe = (estado: string, esHoy = false) =>
+  esHoy && estado !== 'cancelada' ? COLORS.hoy : COLORS[estado] ?? COLORS.pendiente;
 const inicial = (n: string | null) => (n?.trim()?.[0] ?? '?').toUpperCase();
 
 export default function CalendarClient({ visitas }: { visitas: Visita[] }) {
@@ -39,7 +41,7 @@ export default function CalendarClient({ visitas }: { visitas: Visita[] }) {
   const proximas = visitas.filter((v) => v.estado !== 'cancelada' && v.fecha_visita >= hoy).slice(0, 5);
 
   const events = visitas.map((v) => {
-    const c = colorDe(v.estado);
+    const c = colorDe(v.estado, v.fecha_visita === hoy);
     return {
       id: String(v.id),
       title: `${v.hora_visita?.slice(0, 5) ?? ''} · ${v.propiedad_titulo ?? 'Visita'}`,
@@ -80,9 +82,10 @@ export default function CalendarClient({ visitas }: { visitas: Visita[] }) {
             eventClick={(info) => setSel(info.event.extendedProps as Visita)}
           />
           <div className="cal-legend">
-            <span className="badge confirmada">Confirmada</span>
-            <span className="badge pendiente">Pendiente</span>
-            <span className="badge cancelada">Cancelada</span>
+            <span className="cal-leg"><span className="sw confirmada" />Confirmada</span>
+            <span className="cal-leg"><span className="sw hoy" />Hoy</span>
+            <span className="cal-leg"><span className="sw pendiente" />Pendiente</span>
+            <span className="cal-leg"><span className="sw cancelada" />Cancelada</span>
           </div>
         </div>
 
