@@ -148,7 +148,8 @@ a { color: inherit; text-decoration: none; }
 .topbar-user-role { font-size: 12px; color: var(--text-muted); }
 
 /* ===================== Content ===================== */
-.content { flex: 1; padding: 28px 40px 48px; max-width: 1280px; width: 100%; }
+.content { flex: 1; width: 100%; max-width: 1200px; margin: 0 auto; padding: 28px 40px 48px; }
+@media (min-width: 1700px) { .content { padding-left: 56px; padding-right: 56px; } }
 .page-title { font-family: var(--font-display); font-size: 28px; font-weight: 700; letter-spacing: -.02em; color: var(--text); margin: 0 0 6px; }
 .page-sub { color: var(--text-muted); font-size: 14px; margin: 0 0 24px; }
 
@@ -542,4 +543,21 @@ td, .tabla td { padding: 14px 16px; border-bottom: 1px solid var(--surface-alt);
   .content { padding: 22px 18px; } .topbar { padding: 0 18px; }
   .chats-layout { grid-template-columns: 1fr; } .lead-pane { max-height: 420px; }
   .phero { padding: 22px; } .phero-title { font-size: 30px; }
+}
+
+/* Teléfono: topbar y tipografías compactas, todo en una columna */
+@media (max-width: 640px) {
+  .topbar { height: auto; flex-wrap: wrap; padding: 12px 16px; gap: 10px; }
+  .topbar-search { order: 3; flex: 1 1 100%; max-width: none; }
+  .topbar-divider, .topbar-user-info { display: none; }
+  .topbar-actions { gap: 10px; }
+  .content { padding: 18px 16px 36px; }
+  .hero { padding: 26px 20px; } .hero-title { font-size: 26px; }
+  .hero-ctas { gap: 10px; } .cta { flex: 1 1 auto; justify-content: center; }
+  .stat-card .value { font-size: 40px; }
+  .phero { flex-direction: column; align-items: flex-start; } .phero-title { font-size: 26px; }
+  .phero-stats { width: 100%; } .pstat { flex: 1 1 calc(50% - 6px); min-width: 0; }
+  .prop-toolbar .segmented { width: 100%; overflow-x: auto; }
+  .dash-card-title, .login-title { font-size: 22px; }
+  .login-wrap { grid-template-columns: 1fr; }
 }
