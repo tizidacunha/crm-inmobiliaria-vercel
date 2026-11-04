@@ -487,6 +487,48 @@ td, .tabla td { padding: 14px 16px; border-bottom: 1px solid var(--surface-alt);
 .asesor-wa .material-symbols-outlined { font-size: 17px; }
 .asesor-actions { display: flex; gap: 9px; }
 
+/* ===================== Topbar logout ===================== */
+.topbar-logout { width: 40px; height: 40px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: var(--r-ctrl); background: var(--panel); color: var(--text-muted); cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
+.topbar-logout:hover { background: var(--surface-alt); color: var(--accent-text); border-color: var(--border-strong); }
+.topbar-logout .material-symbols-outlined { font-size: 20px; }
+
+/* ===================== Login ===================== */
+.login-wrap { display: grid; grid-template-columns: 46% 54%; min-height: 100vh; }
+.login-art {
+  position: relative; overflow: hidden;
+  background: var(--ink); color: var(--ink-text);
+  padding: 48px 52px; display: flex; flex-direction: column;
+}
+.login-brand { display: flex; align-items: center; gap: 14px; }
+.login-logo { width: 52px; height: 52px; }
+.login-name { font-family: var(--font-display); font-size: 26px; font-weight: 800; color: #fff; letter-spacing: -.02em; line-height: 1; }
+.login-kick { font-size: 12px; font-weight: 600; color: var(--ink-muted); letter-spacing: .14em; text-transform: uppercase; margin-top: 4px; }
+.login-tag { font-family: var(--font-display); font-size: 30px; font-weight: 500; line-height: 1.18; color: #fff; letter-spacing: -.02em; max-width: 440px; margin: auto 0 0; position: relative; z-index: 2; }
+.login-art-sun { position: absolute; right: 0; bottom: 0; width: 520px; height: 300px; pointer-events: none; opacity: .95; }
+
+.login-panel { display: flex; align-items: center; justify-content: center; padding: 48px 40px; background: var(--bg); }
+.login-box { width: 100%; max-width: 380px; }
+.login-title { font-family: var(--font-display); font-size: 34px; font-weight: 800; letter-spacing: -.03em; color: var(--text); margin: 0 0 8px; }
+.login-desc { font-size: 14.5px; color: var(--text-muted); margin: 0 0 28px; }
+.login-form { display: flex; flex-direction: column; gap: 16px; }
+.login-field { display: flex; flex-direction: column; gap: 7px; }
+.login-field span { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); }
+.login-field input { height: 48px; padding: 0 15px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-ctrl); font-size: 15px; font-family: inherit; color: var(--text); }
+.login-field input::placeholder { color: #9AA1A9; }
+.login-field input:focus { outline: none; border-color: var(--ink-border); }
+.login-submit { width: 100%; justify-content: center; height: 48px; margin-top: 6px; font-size: 15px; }
+.login-error { background: var(--accent-soft); color: #8F3212; padding: 11px 14px; border-radius: var(--r-ctrl); font-size: 14px; border: 1px solid #f6cdb8; }
+.login-demo { display: flex; flex-direction: column; gap: 3px; margin-top: 26px; padding: 14px 16px; background: var(--surface-alt); border: 1px dashed var(--border-strong); border-radius: var(--r-ctrl); font-size: 13.5px; color: var(--neutral-text); font-family: ui-monospace, Consolas, monospace; }
+.login-demo-k { font-family: var(--font-body); font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
+
+@media (max-width: 860px) {
+  .login-wrap { grid-template-columns: 1fr; }
+  .login-art { padding: 36px 28px; min-height: 240px; }
+  .login-tag { font-size: 24px; margin-top: 28px; }
+  .login-art-sun { width: 360px; height: 210px; opacity: .8; }
+  .login-panel { padding: 36px 24px; }
+}
+
 /* ===================== Responsive ===================== */
 @media (max-width: 1200px) { .chats-layout { grid-template-columns: 300px 1fr; } .ctx-pane { display: none; } }
 @media (max-width: 1100px) { .dash-grid { grid-template-columns: 1fr; } }

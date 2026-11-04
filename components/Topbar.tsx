@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import LogoutButton from './LogoutButton';
 
 export default function Topbar() {
   return (
@@ -20,6 +21,7 @@ export default function Topbar() {
             <span className="topbar-user-name">Panel interno</span>
             <span className="topbar-user-role">Inmobiliaria Horizonte</span>
           </div>
+          <LogoutButton />
         </div>
       </div>
     </header>
