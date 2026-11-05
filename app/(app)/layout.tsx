@@ -1,5 +1,8 @@
-import Sidebar from '@/components/Sidebar';
+import AppSidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
+import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import { Toaster } from '@/components/ui/sonner';
 import { pool } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
@@ -27,12 +30,15 @@ async function getNavCounts() {
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const counts = await getNavCounts();
   return (
-    <div className="app-shell">
-      <Sidebar counts={counts} />
-      <div className="app-main">
-        <Topbar />
-        <main className="content">{children}</main>
-      </div>
-    </div>
+    <TooltipProvider delay={200}>
+      <SidebarProvider>
+        <AppSidebar counts={counts} />
+        <SidebarInset>
+          <Topbar />
+          <main className="content">{children}</main>
+        </SidebarInset>
+      </SidebarProvider>
+      <Toaster />
+    </TooltipProvider>
   );
 }
