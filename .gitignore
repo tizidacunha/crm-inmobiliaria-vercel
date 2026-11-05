@@ -2,3 +2,8 @@ node_modules/
 .next/
 .env*
 *.tsbuildinfo
+
+# tooling de agentes (skills) — no es parte del producto
+.agents/
+.claude/
+skills-lock.json
