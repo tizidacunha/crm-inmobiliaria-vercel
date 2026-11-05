@@ -1,17 +1,18 @@
 import ChatsInbox from '@/components/ChatsInbox';
+import LiveBadge from '@/components/LiveBadge';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ChatThreadPage({ params }: { params: { userId: string } }) {
   const userId = decodeURIComponent(params.userId);
   return (
-    <div>
-      <div className="toolbar">
+    <div className="flex flex-col gap-6">
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <div className="phero-kick" style={{ color: 'var(--text-muted)' }}>Bandeja del asistente</div>
-          <h2 className="page-title" style={{ marginBottom: 0 }}>Chats</h2>
+          <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Bandeja del asistente</div>
+          <h2 className="font-display text-[28px] font-bold tracking-[-0.02em]">Chats</h2>
         </div>
-        <span className="live-badge">En vivo</span>
+        <LiveBadge />
       </div>
       <ChatsInbox selectedId={userId} />
     </div>

@@ -1,6 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
 
 export default function LoginForm() {
   const [user, setUser] = useState('');
@@ -33,11 +36,14 @@ export default function LoginForm() {
   }
 
   return (
-    <form className="login-form" onSubmit={onSubmit}>
-      {error && <div className="login-error">{error}</div>}
-      <label className="login-field">
-        <span>Email</span>
-        <input
+    <form className="flex flex-col gap-4" onSubmit={onSubmit}>
+      {error && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-3.5 py-2.5 text-sm text-destructive">{error}</div>
+      )}
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="user" className="text-xs font-bold uppercase tracking-[0.06em] text-muted-foreground">Email</Label>
+        <Input
+          id="user"
           type="email"
           autoComplete="username"
           placeholder="nombre@horizonte.com"
@@ -45,22 +51,25 @@ export default function LoginForm() {
           onChange={(e) => setUser(e.target.value)}
           required
           autoFocus
+          className="h-12"
         />
-      </label>
-      <label className="login-field">
-        <span>Contraseña</span>
-        <input
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="pass" className="text-xs font-bold uppercase tracking-[0.06em] text-muted-foreground">Contraseña</Label>
+        <Input
+          id="pass"
           type="password"
           autoComplete="current-password"
           placeholder="••••••••"
           value={pass}
           onChange={(e) => setPass(e.target.value)}
           required
+          className="h-12"
         />
-      </label>
-      <button className="btn btn-primary login-submit" type="submit" disabled={loading}>
+      </div>
+      <Button type="submit" disabled={loading} className="mt-1.5 h-12 w-full text-[15px]">
         {loading ? 'Ingresando…' : 'Entrar'}
-      </button>
+      </Button>
     </form>
   );
 }

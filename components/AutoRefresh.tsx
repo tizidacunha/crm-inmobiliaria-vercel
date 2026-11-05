@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import LiveBadge from '@/components/LiveBadge';
 
 /**
  * Refresca el server component en intervalos (router.refresh re-ejecuta la
@@ -28,10 +29,5 @@ export default function AutoRefresh({
   }, [router, intervalMs]);
 
   if (!label) return null;
-  return (
-    <span className="live-badge">
-      <span className="status-dot ok" />
-      En vivo
-    </span>
-  );
+  return <LiveBadge />;
 }
