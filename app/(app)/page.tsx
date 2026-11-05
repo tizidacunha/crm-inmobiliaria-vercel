@@ -1,5 +1,11 @@
+import Link from 'next/link';
 import { pool } from '@/lib/db';
 import { resolvePhone } from '@/lib/waha';
+import { cn } from '@/lib/utils';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,7 +15,6 @@ const waLink = (tel: string | null | undefined) => {
 };
 
 const WEEKDAYS = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
-const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
 /* De 'DD/MM' → { d, w, hoy } para el bloque de fecha de cada visita. */
 function fechaBlock(fecha: string) {
@@ -46,6 +51,18 @@ function iniciales(nombre: string) {
   const limpio = s.replace(/[^A-Za-zÀ-ÿ0-9]/g, '');
   return (limpio.slice(0, 2) || '?').toUpperCase();
 }
+
+const STATUS_CLS: Record<string, string> = {
+  interesado: 'border-transparent bg-success/15 text-success-foreground',
+  consultando: 'border-transparent bg-muted text-muted-foreground',
+  derivado: 'border-transparent bg-accent text-accent-foreground',
+  confirmada: 'border-transparent bg-secondary text-secondary-foreground',
+};
+const DOT_CLS: Record<string, string> = {
+  ink: 'bg-secondary',
+  accent: 'bg-primary',
+  success: 'bg-success',
+};
 
 async function getData() {
   const [kpis, visitas, leadsRaw] = await Promise.all([
@@ -88,15 +105,18 @@ async function getData() {
 
 function SunArt() {
   return (
-    <svg className="hero-art" viewBox="0 0 520 300" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      {/* líneas de horizonte */}
+    <svg
+      className="pointer-events-none absolute bottom-0 right-0 hidden h-[300px] w-[520px] md:block"
+      viewBox="0 0 520 300"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
       <line x1="40" y1="210" x2="505" y2="210" stroke="#E6EBEF" strokeWidth="1.6" strokeLinecap="round" opacity="0.55" />
       <line x1="95" y1="236" x2="470" y2="236" stroke="#E6EBEF" strokeWidth="1.6" strokeLinecap="round" opacity="0.32" />
       <line x1="150" y1="262" x2="430" y2="262" stroke="#E6EBEF" strokeWidth="1.6" strokeLinecap="round" opacity="0.16" />
-      {/* arcos concéntricos */}
       <path d="M185 210 A175 175 0 0 1 535 210" stroke="#3A4F60" strokeWidth="1.3" opacity="0.32" />
       <path d="M225 210 A135 135 0 0 1 495 210" stroke="#3A4F60" strokeWidth="1.3" opacity="0.5" />
-      {/* sol semicírculo sobre el horizonte */}
       <path d="M265 210 A95 95 0 0 1 455 210 Z" fill="#F26B3A" />
     </svg>
   );
@@ -130,119 +150,171 @@ export default async function HomePage() {
   ];
 
   return (
-    <div>
+    <div className="flex flex-col gap-6">
       {/* ===== Hero ===== */}
-      <section className="hero">
+      <section className="relative overflow-hidden rounded-[22px] bg-secondary px-6 py-9 text-secondary-foreground md:px-10">
         <SunArt />
-        <div className="hero-date">{hoyStr}</div>
-        <h1 className="hero-title">
-          Buen día, equipo.<br />
-          {visitasHoy > 0 ? `Hoy hay ${visitasHoy} ${visitasHoy === 1 ? 'visita' : 'visitas'} en agenda.` : 'Hoy no hay visitas en agenda.'}
+        <div className="text-xs font-bold uppercase tracking-[0.14em] text-secondary-foreground/60">{hoyStr}</div>
+        <h1 className="my-3.5 max-w-[560px] font-display text-[32px] font-extrabold leading-[1.04] tracking-[-0.03em] text-white md:text-[44px]">
+          Buen día, equipo.
+          <br />
+          {visitasHoy > 0
+            ? `Hoy hay ${visitasHoy} ${visitasHoy === 1 ? 'visita' : 'visitas'} en agenda.`
+            : 'Hoy no hay visitas en agenda.'}
         </h1>
         {prox && (
-          <p className="hero-next">
-            Próxima: <b>{prox.hora} hs</b> · {prox.propiedad_titulo} con {prox.nombre_cliente}.
+          <p className="max-w-[560px] text-sm text-secondary-foreground/90">
+            Próxima: <b className="text-white">{prox.hora} hs</b> · {prox.propiedad_titulo} con {prox.nombre_cliente}.
           </p>
         )}
-        <div className="hero-ctas">
-          <a className="cta cta-solid" href="/visitas">Ver agenda de hoy</a>
+        <div className="mt-6 flex flex-wrap gap-3">
+          <Button render={<Link href="/visitas" />} className="bg-white text-secondary hover:bg-white/90">
+            Ver agenda de hoy
+          </Button>
           {derivaciones > 0 && (
-            <a className="cta cta-outline" href="/chats">
+            <Button
+              variant="outline"
+              render={<Link href="/chats" />}
+              className="border-white/25 bg-transparent text-white hover:bg-white/10 hover:text-white"
+            >
               Revisar {derivaciones} {derivaciones === 1 ? 'derivación' : 'derivaciones'}
-            </a>
+            </Button>
           )}
         </div>
       </section>
 
       {/* ===== KPIs ===== */}
-      <div className="stat-grid">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(190px,1fr))] gap-4">
         {kpis.map((s) => (
-          <div className="stat-card" key={s.label}>
-            <span className={`kdot ${s.dot}`} />
-            <span className="label">{s.label}</span>
-            <span className="value">{s.value}</span>
-            <span className="hint">{s.hint}</span>
-          </div>
+          <Card key={s.label} className="relative gap-0 py-5">
+            <CardContent className="flex flex-col gap-2.5">
+              <span className={cn('absolute right-5 top-5 size-2 rounded-full', DOT_CLS[s.dot])} />
+              <span className="pr-5 text-[11px] font-bold uppercase tracking-[0.1em] text-muted-foreground">{s.label}</span>
+              <span className="font-display text-5xl font-extrabold leading-[0.9] tracking-[-0.04em]">{s.value}</span>
+              <span className="text-[13px] text-muted-foreground">{s.hint}</span>
+            </CardContent>
+          </Card>
         ))}
-        <a className="stat-card action" href="/chats">
-          <span className="kdot" />
-          <span className="label">Derivaciones</span>
-          <span className="value">{derivaciones}</span>
-          <span className="hint">Requiere un asesor</span>
-        </a>
+        <Link href="/chats" className="contents">
+          <Card className="relative cursor-pointer gap-0 bg-primary py-5 text-primary-foreground ring-0 transition-transform hover:-translate-y-0.5">
+            <CardContent className="flex flex-col gap-2.5">
+              <span className="absolute right-5 top-5 size-2 rounded-full bg-secondary" />
+              <span className="pr-5 text-[11px] font-bold uppercase tracking-[0.1em]">Derivaciones</span>
+              <span className="font-display text-5xl font-extrabold leading-[0.9] tracking-[-0.04em]">{derivaciones}</span>
+              <span className="text-[13px]">Requiere un asesor</span>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       {/* ===== Cartera ===== */}
-      <div className="card" style={{ marginBottom: 24 }}>
-        <div className="cartera-head">
+      <Card className="gap-4">
+        <CardHeader className="flex-row items-start justify-between">
           <div>
-            <h3 className="dash-card-title">Cartera disponible</h3>
-            <p className="dash-card-sub">Distribución de las {propActivas} propiedades publicadas.</p>
+            <CardTitle className="font-display text-2xl tracking-[-0.02em]">Cartera disponible</CardTitle>
+            <CardDescription>Distribución de las {propActivas} propiedades publicadas.</CardDescription>
           </div>
-          <a className="cartera-link" href="/propiedades">Ver propiedades →</a>
-        </div>
-        <div className="cartera-bar">
-          <div className="cartera-seg ink" style={{ width: `${(alquiler / totalOps) * 100}%` }} />
-          <div className="cartera-seg venta" style={{ width: `${(venta / totalOps) * 100}%` }} />
-        </div>
-        <div className="cartera-legend">
-          <span className="leg"><span className="sw ink" /><span className="n">{alquiler}</span> en alquiler</span>
-          <span className="leg"><span className="sw venta" /><span className="n">{venta}</span> en venta</span>
-          <span className="leg"><span className="star material-symbols-outlined">star</span><span className="n">{n(k.prop_destacadas)}</span> destacadas</span>
-        </div>
-      </div>
+          <Link href="/propiedades" className="text-sm font-bold text-cobalt">
+            Ver propiedades →
+          </Link>
+        </CardHeader>
+        <CardContent>
+          <div className="flex h-4 gap-1.5">
+            <div className="h-full rounded-full bg-secondary" style={{ width: `${(alquiler / totalOps) * 100}%` }} />
+            <div className="h-full rounded-full bg-primary" style={{ width: `${(venta / totalOps) * 100}%` }} />
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-6 text-sm text-muted-foreground">
+            <span className="inline-flex items-center gap-2">
+              <span className="size-2.5 rounded-sm bg-secondary" />
+              <b className="font-display text-xl text-foreground">{alquiler}</b> en alquiler
+            </span>
+            <span className="inline-flex items-center gap-2">
+              <span className="size-2.5 rounded-sm bg-primary" />
+              <b className="font-display text-xl text-foreground">{venta}</b> en venta
+            </span>
+            <span className="inline-flex items-center gap-2">
+              <span className="material-symbols-outlined text-[18px] text-primary">star</span>
+              <b className="font-display text-xl text-foreground">{n(k.prop_destacadas)}</b> destacadas
+            </span>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* ===== Paneles ===== */}
-      <div className="dash-grid">
-        <div className="card">
-          <h3 className="dash-card-title">Próximas visitas</h3>
-          <p className="dash-card-sub">Agenda confirmada de los próximos días.</p>
-          {visitas.length === 0 && <div className="dash-empty">No hay visitas próximas confirmadas.</div>}
-          {visitas.map((v, i) => {
-            const fb = fechaBlock(v.fecha);
-            const wa = waLink(v.telefono);
-            return (
-              <div className="visita-row" key={i}>
-                <div className={`visita-date${fb.hoy ? ' hoy' : ''}`}>
-                  <span className="d">{fb.d}</span>
-                  <span className="w">{fb.hoy ? 'HOY' : fb.w}</span>
-                </div>
-                <div className="visita-main">
-                  <div className="visita-t1">{v.propiedad_titulo || 'Visita'}</div>
-                  <div className="visita-t2">{v.nombre_cliente || 'Sin nombre'} · {v.hora} hs</div>
-                </div>
-                {wa && (
-                  <a className="visita-chat" href={wa} target="_blank" rel="noreferrer" title="Contactar por WhatsApp">
-                    <span className="material-symbols-outlined">chat</span>
-                  </a>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="card">
-          <h3 className="dash-card-title">Últimas conversaciones</h3>
-          <p className="dash-card-sub">Los leads más recientes que atendió el asistente.</p>
-          {leads.length === 0 && <div className="dash-empty">Todavía no hay conversaciones.</div>}
-          {leads.map((l, i) => {
-            const st = leadStatus(l.message);
-            const cls = i === leads.length - 1 ? 'v1' : 'v0';
-            return (
-              <div className="conv-row" key={i}>
-                <div className={`conv-av ${cls}`}>{iniciales(l.display)}</div>
-                <div className="conv-main">
-                  <div className="conv-head">
-                    <span className="conv-name">{l.display}</span>
-                    <span className={`cstatus ${st.cls}`}>{st.label}</span>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="font-display text-2xl tracking-[-0.02em]">Próximas visitas</CardTitle>
+            <CardDescription>Agenda confirmada de los próximos días.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col">
+            {visitas.length === 0 && <div className="py-3.5 text-sm text-muted-foreground">No hay visitas próximas confirmadas.</div>}
+            {visitas.map((v, i) => {
+              const fb = fechaBlock(v.fecha);
+              const wa = waLink(v.telefono);
+              return (
+                <div key={i} className="flex items-center gap-4 border-t border-muted py-3 first:border-t-0">
+                  <div
+                    className={cn(
+                      'flex h-14 w-13 shrink-0 flex-col items-center justify-center rounded-lg',
+                      fb.hoy ? 'bg-primary text-primary-foreground' : 'bg-background text-foreground'
+                    )}
+                  >
+                    <span className="font-display text-[22px] font-extrabold leading-none">{fb.d}</span>
+                    <span className={cn('mt-0.5 text-[10px] font-bold uppercase tracking-wide', fb.hoy ? 'text-primary-foreground' : 'text-muted-foreground')}>
+                      {fb.hoy ? 'HOY' : fb.w}
+                    </span>
                   </div>
-                  <div className="conv-msg">{l.message}</div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[14.5px] font-semibold">{v.propiedad_titulo || 'Visita'}</div>
+                    <div className="mt-0.5 text-[13px] text-muted-foreground">{v.nombre_cliente || 'Sin nombre'} · {v.hora} hs</div>
+                  </div>
+                  {wa && (
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      render={<a href={wa} target="_blank" rel="noreferrer" title="Contactar por WhatsApp" />}
+                      className="size-11 shrink-0 rounded-xl text-primary"
+                    >
+                      <span className="material-symbols-outlined">chat</span>
+                    </Button>
+                  )}
                 </div>
-                <span className="conv-time">{l.cuando}</span>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="font-display text-2xl tracking-[-0.02em]">Últimas conversaciones</CardTitle>
+            <CardDescription>Los leads más recientes que atendió el asistente.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col">
+            {leads.length === 0 && <div className="py-3.5 text-sm text-muted-foreground">Todavía no hay conversaciones.</div>}
+            {leads.map((l, i) => {
+              const st = leadStatus(l.message);
+              const orange = i === leads.length - 1;
+              return (
+                <div key={i} className="flex items-start gap-3 border-t border-muted py-3.5 first:border-t-0">
+                  <Avatar className="size-11 shrink-0">
+                    <AvatarFallback className={cn('font-display text-sm font-bold', orange ? 'bg-primary text-primary-foreground' : 'bg-secondary text-white')}>
+                      {iniciales(l.display)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-[14.5px] font-bold">{l.display}</span>
+                      <Badge className={cn('shrink-0', STATUS_CLS[st.cls])}>{st.label}</Badge>
+                    </div>
+                    <div className="mt-0.5 truncate text-[13px] text-muted-foreground">{l.message}</div>
+                  </div>
+                  <span className="shrink-0 pt-0.5 text-[12.5px] text-muted-foreground">{l.cuando}</span>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

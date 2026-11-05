@@ -14,8 +14,8 @@ export default async function VisitasPage() {
   `);
 
   return (
-    <div>
-      <h2 className="page-title">Visitas</h2>
+    <div className="flex flex-col gap-6">
+      <h2 className="font-display text-[28px] font-bold tracking-[-0.02em]">Visitas</h2>
       <CalendarClient visitas={rows} />
     </div>
   );

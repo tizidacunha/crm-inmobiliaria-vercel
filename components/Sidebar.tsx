@@ -2,6 +2,19 @@
 
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuBadge,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from '@/components/ui/sidebar';
+import { cn } from '@/lib/utils';
 
 const NAV = [
   { href: '/', label: 'Resumen', icon: 'dashboard' },
@@ -13,60 +26,82 @@ const NAV = [
 
 function Logo() {
   return (
-    <svg className="sidebar-logo" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <svg viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" className="size-11 shrink-0">
       <rect width="44" height="44" rx="11" fill="#1A2E3D" />
-      {/* sol de atardecer */}
       <path d="M14 27a8 8 0 0 1 16 0" fill="#F26B3A" />
-      {/* línea de horizonte */}
       <line x1="10" y1="27" x2="34" y2="27" stroke="#FFFFFF" strokeWidth="1.6" strokeLinecap="round" />
       <line x1="13" y1="31" x2="31" y2="31" stroke="#FFFFFF" strokeWidth="1.6" strokeLinecap="round" opacity="0.5" />
     </svg>
   );
 }
 
-export default function Sidebar({ counts = {} }: { counts?: Record<string, number> }) {
+export default function AppSidebar({ counts = {} }: { counts?: Record<string, number> }) {
   const pathname = usePathname();
   const isActive = (href: string) =>
     href === '/' ? pathname === '/' : pathname.startsWith(href);
 
   return (
-    <aside className="sidebar">
-      <div className="sidebar-brand">
+    <Sidebar>
+      <SidebarHeader className="h-21 flex-row items-center gap-3 px-5">
         <Logo />
-        <div>
-          <div className="sidebar-name">horizonte</div>
-          <div className="sidebar-sub">Inmobiliaria</div>
+        <div className="leading-none">
+          <div className="font-display text-[22px] font-extrabold tracking-[-0.02em] text-white">horizonte</div>
+          <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-sidebar-foreground/60">
+            Inmobiliaria
+          </div>
         </div>
-      </div>
+      </SidebarHeader>
 
-      <nav className="sidebar-nav">
-        <div className="nav-section-title">Operaciones</div>
-        {NAV.map((item) => {
-          const n = counts[item.href];
-          const hot = item.href === '/chats';
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`nav-link${isActive(item.href) ? ' active' : ''}`}
-            >
-              <span className="material-symbols-outlined">{item.icon}</span>
-              <span className="nav-label">{item.label}</span>
-              {n != null && n > 0 && (
-                <span className={`nav-count${hot ? ' hot' : ''}`}>{n}</span>
-              )}
-            </Link>
-          );
-        })}
-      </nav>
+      <SidebarContent className="px-2">
+        <SidebarGroup>
+          <SidebarGroupLabel>Operaciones</SidebarGroupLabel>
+          <SidebarMenu>
+            {NAV.map((item) => {
+              const active = isActive(item.href);
+              const n = counts[item.href];
+              const hot = item.href === '/chats';
+              return (
+                <SidebarMenuItem key={item.href}>
+                  <SidebarMenuButton
+                    isActive={active}
+                    render={<Link href={item.href} />}
+                    className={cn(
+                      'min-h-11 text-[15px] font-medium',
+                      active &&
+                        'bg-sidebar-primary! font-bold text-sidebar-primary-foreground! hover:bg-sidebar-primary!'
+                    )}
+                  >
+                    <span className="material-symbols-outlined">{item.icon}</span>
+                    <span>{item.label}</span>
+                  </SidebarMenuButton>
+                  {n != null && n > 0 && (
+                    <SidebarMenuBadge
+                      className={cn(
+                        'text-sidebar-foreground',
+                        hot && !active && 'bg-sidebar-primary text-sidebar-primary-foreground'
+                      )}
+                    >
+                      {n}
+                    </SidebarMenuBadge>
+                  )}
+                </SidebarMenuItem>
+              );
+            })}
+          </SidebarMenu>
+        </SidebarGroup>
+      </SidebarContent>
 
-      <div className="sidebar-footer">
-        <div className="op">
-          <span className="status-dot ok" />
-          Asistente operativo
+      <SidebarFooter>
+        <div className="rounded-lg bg-sidebar-accent p-3.5">
+          <div className="flex items-center gap-2.5 text-sm font-semibold text-white">
+            <span className="size-2.5 rounded-full bg-success shadow-[0_0_0_3px_rgba(91,214,160,0.18)]" />
+            Asistente operativo
+          </div>
+          <div className="mt-1 text-xs leading-snug text-sidebar-foreground/60">
+            El bot de WhatsApp está respondiendo leads en este momento.
+          </div>
         </div>
-        <div className="st">El bot de WhatsApp está respondiendo leads en este momento.</div>
-      </div>
-    </aside>
+      </SidebarFooter>
+    </Sidebar>
   );
 }

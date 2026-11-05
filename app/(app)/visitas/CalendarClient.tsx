@@ -3,6 +3,13 @@
 import { useState } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
+import listPlugin from '@fullcalendar/list';
+import { cn } from '@/lib/utils';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 
 type Visita = {
   id: number;
@@ -26,8 +33,23 @@ const colorDe = (estado: string, esHoy = false) =>
   esHoy && estado !== 'cancelada' ? COLORS.hoy : COLORS[estado] ?? COLORS.pendiente;
 const inicial = (n: string | null) => (n?.trim()?.[0] ?? '?').toUpperCase();
 
+const LEYENDA = [
+  { k: 'Confirmada', c: '#0F1E2A' },
+  { k: 'Hoy', c: '#F26B3A' },
+  { k: 'Pendiente', c: '#FDE6DB' },
+  { k: 'Cancelada', c: '#C7CCD1' },
+];
+
+const ESTADO_BADGE: Record<string, string> = {
+  confirmada: 'bg-secondary text-white',
+  reprogramada: 'bg-accent text-accent-foreground',
+  pendiente: 'bg-accent text-accent-foreground',
+  cancelada: 'bg-muted text-muted-foreground',
+};
+
 export default function CalendarClient({ visitas }: { visitas: Visita[] }) {
   const [sel, setSel] = useState<Visita | null>(null);
+  const isMobile = useIsMobile();
 
   const hoy = new Date().toLocaleDateString('en-CA');
   const en7 = new Date(Date.now() + 7 * 864e5).toLocaleDateString('en-CA');
@@ -58,86 +80,128 @@ export default function CalendarClient({ visitas }: { visitas: Visita[] }) {
     return d.length >= 8 ? `https://wa.me/${d}` : null;
   };
 
+  const kpis = [
+    { label: 'Visitas hoy', value: kpi.hoy, cls: 'text-foreground' },
+    { label: 'Próximos 7 días', value: kpi.semana, cls: 'text-foreground' },
+    { label: 'Confirmadas', value: kpi.confirmadas, cls: 'text-primary' },
+    { label: 'Canceladas', value: kpi.canceladas, cls: 'text-destructive' },
+  ];
+
   return (
-    <div className="visitas-page">
-      <div className="stat-grid">
-        <div className="stat-card"><span className="label">Visitas hoy</span><span className="value">{kpi.hoy}</span></div>
-        <div className="stat-card"><span className="label">Próximos 7 días</span><span className="value">{kpi.semana}</span></div>
-        <div className="stat-card"><span className="label">Confirmadas</span><span className="value" style={{ color: 'var(--accent)' }}>{kpi.confirmadas}</span></div>
-        <div className="stat-card"><span className="label">Canceladas</span><span className="value" style={{ color: 'var(--danger)' }}>{kpi.canceladas}</span></div>
+    <div className="flex flex-col gap-6">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {kpis.map((s) => (
+          <Card key={s.label} className="gap-0 py-5">
+            <CardContent className="flex flex-col gap-2">
+              <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-muted-foreground">{s.label}</span>
+              <span className={cn('font-display text-5xl font-extrabold leading-[0.9] tracking-[-0.04em]', s.cls)}>{s.value}</span>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
-      <div className="visitas-grid">
-        <div className="card visitas-cal">
-          <FullCalendar
-            plugins={[dayGridPlugin]}
-            initialView="dayGridMonth"
-            locale="es"
-            firstDay={1}
-            height="auto"
-            buttonText={{ today: 'Hoy' }}
-            headerToolbar={{ left: 'title', center: '', right: 'prev,today,next' }}
-            dayMaxEvents={3}
-            events={events}
-            eventClick={(info) => setSel(info.event.extendedProps as Visita)}
-          />
-          <div className="cal-legend">
-            <span className="cal-leg"><span className="sw confirmada" />Confirmada</span>
-            <span className="cal-leg"><span className="sw hoy" />Hoy</span>
-            <span className="cal-leg"><span className="sw pendiente" />Pendiente</span>
-            <span className="cal-leg"><span className="sw cancelada" />Cancelada</span>
-          </div>
-        </div>
+      <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+        <Card>
+          <CardContent>
+            <FullCalendar
+              key={isMobile ? 'list' : 'grid'}
+              plugins={[dayGridPlugin, listPlugin]}
+              initialView={isMobile ? 'listWeek' : 'dayGridMonth'}
+              locale="es"
+              firstDay={1}
+              height="auto"
+              buttonText={{ today: 'Hoy', list: 'Lista', month: 'Mes' }}
+              headerToolbar={
+                isMobile
+                  ? { left: 'title', center: '', right: 'prev,next' }
+                  : { left: 'title', center: '', right: 'prev,today,next' }
+              }
+              dayMaxEvents={3}
+              events={events}
+              eventClick={(info) => setSel(info.event.extendedProps as Visita)}
+              noEventsText="No hay visitas en este rango"
+            />
+            <div className="mt-4 flex flex-wrap gap-4 border-t border-muted pt-4">
+              {LEYENDA.map((l) => (
+                <span key={l.k} className="inline-flex items-center gap-2 text-[13px] font-semibold text-muted-foreground">
+                  <span className="size-2.5 rounded-full" style={{ background: l.c, border: l.c === '#FDE6DB' ? '1px solid #F0B79A' : undefined }} />
+                  {l.k}
+                </span>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
 
-        <aside className="card visita-panel">
-          {!sel && (
-            <>
-              <h3 className="panel-title">Próximas visitas</h3>
-              {proximas.length === 0 && (
-                <p className="muted" style={{ fontSize: 13 }}>No hay visitas próximas. Hacé click en una del calendario para ver el detalle.</p>
-              )}
-              <ul className="prox-list">
-                {proximas.map((v) => (
-                  <li key={v.id} onClick={() => setSel(v)}>
-                    <div className="avatar">{inicial(v.nombre_cliente)}</div>
-                    <div className="prox-info">
-                      <span className="prox-prop">{v.propiedad_titulo ?? 'Visita'}</span>
-                      <span className="prox-when">{v.fecha_visita} · {v.hora_visita?.slice(0, 5)}</span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
+        <Card className="lg:sticky lg:top-24 lg:self-start">
+          <CardContent>
+            {!sel && (
+              <>
+                <h3 className="mb-3.5 font-display text-xl font-bold tracking-[-0.02em]">Próximas visitas</h3>
+                {proximas.length === 0 && (
+                  <p className="text-[13px] text-muted-foreground">No hay visitas próximas. Hacé click en una del calendario para ver el detalle.</p>
+                )}
+                <ul className="flex flex-col gap-1">
+                  {proximas.map((v) => (
+                    <li
+                      key={v.id}
+                      onClick={() => setSel(v)}
+                      className="flex cursor-pointer items-center gap-3 rounded-lg p-2.5 transition-colors hover:bg-muted"
+                    >
+                      <Avatar className="size-10">
+                        <AvatarFallback className="bg-secondary font-display text-sm font-bold text-white">{inicial(v.nombre_cliente)}</AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0">
+                        <div className="truncate text-[13.5px] font-semibold">{v.propiedad_titulo ?? 'Visita'}</div>
+                        <div className="text-[12.5px] text-muted-foreground">{v.fecha_visita} · {v.hora_visita?.slice(0, 5)}</div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
 
-          {sel && (
-            <>
-              <div className="panel-head">
-                <div className="avatar large">{inicial(sel.nombre_cliente)}</div>
-                <div>
-                  <div className="panel-name">{sel.nombre_cliente || 'Sin nombre'}</div>
-                  <span className={`badge ${sel.estado}`}>{sel.estado}</span>
+            {sel && (
+              <>
+                <div className="mb-4 flex items-center gap-3">
+                  <Avatar className="size-13">
+                    <AvatarFallback className="bg-secondary font-display text-base font-bold text-white">{inicial(sel.nombre_cliente)}</AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <div className="font-display text-lg font-bold tracking-[-0.02em]">{sel.nombre_cliente || 'Sin nombre'}</div>
+                    <Badge className={cn('mt-1 border-transparent capitalize', ESTADO_BADGE[sel.estado] ?? 'bg-muted text-muted-foreground')}>
+                      {sel.estado}
+                    </Badge>
+                  </div>
                 </div>
-              </div>
 
-              <dl className="panel-rows">
-                <div><dt>Propiedad</dt><dd>{sel.propiedad_titulo || '—'}</dd></div>
-                <div><dt>Fecha y hora</dt><dd>{sel.fecha_visita} · {sel.hora_visita?.slice(0, 5)} hs</dd></div>
-                <div><dt>Teléfono</dt><dd>{sel.telefono || '—'}</dd></div>
-                {sel.notas && <div><dt>Notas</dt><dd>{sel.notas}</dd></div>}
-              </dl>
+                <dl className="flex flex-col gap-3.5">
+                  <Row t="Propiedad" d={sel.propiedad_titulo || '—'} />
+                  <Row t="Fecha y hora" d={`${sel.fecha_visita} · ${sel.hora_visita?.slice(0, 5)} hs`} />
+                  <Row t="Teléfono" d={sel.telefono || '—'} />
+                  {sel.notas && <Row t="Notas" d={sel.notas} />}
+                </dl>
 
-              {waLink(sel.telefono) && (
-                <a className="btn btn-success panel-wa" href={waLink(sel.telefono)!} target="_blank" rel="noreferrer">
-                  <span className="material-symbols-outlined">chat</span>
-                  Contactar por WhatsApp
-                </a>
-              )}
-              <button className="btn panel-close" onClick={() => setSel(null)}>Cerrar</button>
-            </>
-          )}
-        </aside>
+                {waLink(sel.telefono) && (
+                  <Button variant="secondary" render={<a href={waLink(sel.telefono)!} target="_blank" rel="noreferrer" />} className="mt-4 w-full">
+                    <span className="material-symbols-outlined">chat</span>
+                    Contactar por WhatsApp
+                  </Button>
+                )}
+                <Button variant="outline" onClick={() => setSel(null)} className="mt-2 w-full">Cerrar</Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
       </div>
+    </div>
+  );
+}
+
+function Row({ t, d }: { t: string; d: string }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <dt className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">{t}</dt>
+      <dd className="text-[14.5px] font-medium">{d}</dd>
     </div>
   );
 }
