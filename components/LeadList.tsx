@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -33,8 +33,11 @@ const STATUS_CLS: Record<string, string> = {
 
 export default function LeadList({ leads, selectedId, className }: { leads: Lead[]; selectedId: string; className?: string }) {
   const router = useRouter();
+  const params = useSearchParams();
+  const filtroInicial: Filtro =
+    params.get('filtro') === 'derivados' ? 'derivados' : params.get('filtro') === 'visita' ? 'visita' : 'todos';
   const [q, setQ] = useState('');
-  const [filtro, setFiltro] = useState<Filtro>('todos');
+  const [filtro, setFiltro] = useState<Filtro>(filtroInicial);
 
   const query = q.trim().toLowerCase();
   const visibles = leads.filter((l) => {
@@ -51,7 +54,7 @@ export default function LeadList({ leads, selectedId, className }: { leads: Lead
     <Card className={cn('flex max-h-[calc(100vh-150px)] gap-0 p-0', className)}>
       <div className="relative px-4 pb-2.5 pt-4">
         <span className="material-symbols-outlined pointer-events-none absolute left-7 top-[26px] text-[19px] text-muted-foreground">search</span>
-        <Input placeholder="Buscar lead…" value={q} onChange={(e) => setQ(e.target.value)} className="h-10 bg-muted pl-10" />
+        <Input placeholder="Filtrar…" value={q} onChange={(e) => setQ(e.target.value)} className="h-10 bg-muted pl-10" />
       </div>
       <div className="border-b border-muted px-4 pb-3.5">
         <ToggleGroup value={[filtro]} onValueChange={(v) => setFiltro((v[0] as Filtro) ?? 'todos')} variant="outline" className="flex-wrap">

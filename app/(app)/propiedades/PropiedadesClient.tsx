@@ -1,17 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Checkbox } from '@/components/ui/checkbox';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious, type CarouselApi } from '@/components/ui/carousel';
 import { ResponsiveDialog } from '@/components/responsive-dialog';
 
@@ -42,7 +40,16 @@ export type Propiedad = {
   imagenes: string[] | null;
 };
 
-const TIPOS = ['departamento', 'casa', 'ph', 'local'];
+export type Visita = {
+  id: number;
+  propiedad_id: number | null;
+  nombre_cliente: string | null;
+  telefono: string | null;
+  fecha_visita: string;
+  hora_visita: string;
+  estado: string;
+};
+
 const OPERACIONES = ['venta', 'alquiler', 'alquiler_temp'];
 const OPERACION_LABEL: Record<string, string> = {
   venta: 'Venta', alquiler: 'Alquiler', alquiler_temp: 'Alquiler temp.',
@@ -50,17 +57,20 @@ const OPERACION_LABEL: Record<string, string> = {
 const TIPO_LABEL: Record<string, string> = {
   departamento: 'Departamento', casa: 'Casa', ph: 'PH', local: 'Local',
 };
-
-const vacia = {
-  titulo: '', descripcion: '', tipo: 'departamento', operacion: 'alquiler',
-  precio: '', moneda: 'ARS', ambientes: '', dormitorios: '', banos: '',
-  superficie_m2: '', piso: '', direccion: '', barrio: '', ciudad: 'Buenos Aires',
-  caracteristicas: '', expensas: '', requisitos_garantia: '', disponible: true, destacado: false,
-  codigo_aviso: '', url_publica: '', imagenes: '',
+const ESTADO_BADGE: Record<string, string> = {
+  confirmada: 'bg-secondary text-white',
+  reprogramada: 'bg-accent text-accent-foreground',
+  pendiente: 'bg-accent text-accent-foreground',
+  cancelada: 'bg-muted text-muted-foreground',
 };
 
 const fmt = (n: number | string) => Number(n).toLocaleString('es-AR', { maximumFractionDigits: 2 });
 const precioTexto = (p: Propiedad) => `${p.moneda === 'USD' ? 'USD' : '$'} ${fmt(p.precio)}`;
+const inicialNombre = (n: string | null) => (n?.trim()?.[0] ?? '?').toUpperCase();
+const waLink = (tel: string | null) => {
+  const d = (tel ?? '').replace(/\D/g, '');
+  return d.length >= 8 ? `https://wa.me/${d}` : null;
+};
 
 // La principal primero, sin duplicados
 function fotosDe(p: Propiedad): string[] {
@@ -138,8 +148,8 @@ function PropGallery({ fotos, alt, tone }: { fotos: string[]; alt: string; tone:
   );
 }
 
-function PropiedadCard({ p, onToggle, onEditar }: {
-  p: Propiedad; onToggle: () => void; onEditar: () => void;
+function PropiedadCard({ p, destacar, onToggle, onVerVisitas, nVisitas }: {
+  p: Propiedad; destacar: boolean; onToggle: () => void; onVerVisitas: () => void; nVisitas: number;
 }) {
   const esVenta = p.operacion === 'venta';
   const fotos = fotosDe(p);
@@ -152,7 +162,7 @@ function PropiedadCard({ p, onToggle, onEditar }: {
   ].filter(Boolean) as string[];
 
   return (
-    <Card className={cn('group/card gap-0 p-0', p.destacado && 'ring-primary', !p.disponible && 'opacity-80')}>
+    <Card id={`propiedad-${p.id}`} className={cn('group/card gap-0 p-0 scroll-mt-28', p.destacado && 'ring-primary', !p.disponible && 'opacity-80', destacar && 'ring-2 ring-cobalt ring-offset-2')}>
       <div className={cn('relative h-52 overflow-hidden', esVenta ? 'bg-secondary' : 'bg-muted')}>
         <PropGallery fotos={fotos} alt={p.titulo} tone={esVenta ? 'ink' : 'rent'} />
         <span
@@ -214,7 +224,9 @@ function PropiedadCard({ p, onToggle, onEditar }: {
                 Ver publicación ↗
               </a>
             )}
-            <Button variant="secondary" size="sm" onClick={onEditar}>Editar</Button>
+            <Button variant="secondary" size="sm" onClick={onVerVisitas}>
+              Ver visitas{nVisitas > 0 ? ` (${nVisitas})` : ''}
+            </Button>
           </div>
         </div>
 
@@ -226,21 +238,34 @@ function PropiedadCard({ p, onToggle, onEditar }: {
   );
 }
 
-export default function PropiedadesClient({ inicial }: { inicial: Propiedad[] }) {
+export default function PropiedadesClient({ inicial, visitas }: { inicial: Propiedad[]; visitas: Visita[] }) {
   const router = useRouter();
-  const [form, setForm] = useState<Record<string, unknown> | null>(null);
-  const [editId, setEditId] = useState<number | null>(null);
-  const [guardando, setGuardando] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const params = useSearchParams();
   const [filtroOp, setFiltroOp] = useState<string>('todas');
   const [filtroBarrio, setFiltroBarrio] = useState<string>('todos');
   const [orden, setOrden] = useState<string>('recientes');
   const [busqueda, setBusqueda] = useState('');
+  const [visitasDe, setVisitasDe] = useState<Propiedad | null>(null);
+
+  // Resaltar la propiedad que llega desde la ficha de un chat (/propiedades?id=…)
+  const idParam = params.get('id');
+  const [destacado, setDestacado] = useState<number | null>(idParam ? Number(idParam) : null);
+  useEffect(() => {
+    if (destacado == null) return;
+    document.getElementById(`propiedad-${destacado}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const t = setTimeout(() => setDestacado(null), 4000);
+    return () => clearTimeout(t);
+  }, [destacado]);
 
   const barrios = Array.from(new Set(inicial.map((p) => p.barrio).filter(Boolean))).sort();
   const disponibles = inicial.filter((p) => p.disponible).length;
   const enAlquiler = inicial.filter((p) => p.operacion.startsWith('alquiler')).length;
   const enVenta = inicial.filter((p) => p.operacion === 'venta').length;
+
+  const visitasPorProp = (id: number) =>
+    visitas.filter((v) => v.propiedad_id === id).sort((a, b) =>
+      `${a.fecha_visita} ${a.hora_visita}`.localeCompare(`${b.fecha_visita} ${b.hora_visita}`)
+    );
 
   const q = busqueda.trim().toLowerCase();
   const filtradas = inicial
@@ -253,46 +278,6 @@ export default function PropiedadesClient({ inicial }: { inicial: Propiedad[] })
       orden === 'precio_asc' ? a.precio - b.precio : orden === 'precio_desc' ? b.precio - a.precio : 0
     );
 
-  function abrirNueva() { setEditId(null); setForm({ ...vacia }); setError(null); }
-  function abrirEditar(p: Propiedad) {
-    setEditId(p.id);
-    setForm({
-      ...vacia, ...p,
-      precio: p.precio ?? '', ambientes: p.ambientes ?? '', dormitorios: p.dormitorios ?? '',
-      banos: p.banos ?? '', superficie_m2: p.superficie_m2 ?? '', expensas: p.expensas ?? '',
-      piso: p.piso ?? '', descripcion: p.descripcion ?? '', ciudad: p.ciudad ?? 'Buenos Aires',
-      requisitos_garantia: p.requisitos_garantia ?? '',
-      caracteristicas: Array.isArray(p.caracteristicas) ? p.caracteristicas.join(', ') : '',
-      codigo_aviso: p.codigo_aviso ?? '', url_publica: p.url_publica ?? '',
-      imagenes: fotosDe(p).join('\n'),
-    });
-    setError(null);
-  }
-  function cerrar() { setForm(null); setEditId(null); }
-
-  function set(k: string, v: unknown) { setForm((f) => ({ ...(f as object), [k]: v })); }
-  const num = (v: unknown) => (v === '' || v === null || v === undefined ? null : Number(v));
-
-  async function guardar() {
-    if (!form) return;
-    setGuardando(true); setError(null);
-    const payload = {
-      ...form,
-      precio: num(form.precio), ambientes: num(form.ambientes), dormitorios: num(form.dormitorios),
-      banos: num(form.banos), superficie_m2: num(form.superficie_m2), expensas: num(form.expensas),
-      imagen_principal: null,
-    };
-    const url = editId ? `/api/propiedades/${editId}` : '/api/propiedades';
-    const res = await fetch(url, {
-      method: editId ? 'PUT' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    setGuardando(false);
-    if (!res.ok) { const d = await res.json().catch(() => ({})); setError(d.error || 'Error al guardar'); return; }
-    cerrar(); router.refresh();
-  }
-
   async function toggleDisponible(p: Propiedad) {
     await fetch(`/api/propiedades/${p.id}`, {
       method: 'PATCH',
@@ -302,7 +287,7 @@ export default function PropiedadesClient({ inicial }: { inicial: Propiedad[] })
     router.refresh();
   }
 
-  const thumbs = String(form?.imagenes || '').split(/\s+/).filter(Boolean);
+  const visitasModal = visitasDe ? visitasPorProp(visitasDe.id) : [];
 
   return (
     <div className="flex flex-col gap-6">
@@ -320,7 +305,7 @@ export default function PropiedadesClient({ inicial }: { inicial: Propiedad[] })
         </div>
       </section>
 
-      {/* ===== Filtros ===== */}
+      {/* ===== Filtros (búsqueda solo en esta sección) ===== */}
       <div className="flex flex-wrap items-center gap-3">
         <ToggleGroup
           value={[filtroOp]}
@@ -367,17 +352,17 @@ export default function PropiedadesClient({ inicial }: { inicial: Propiedad[] })
         <span className="text-sm text-muted-foreground">{filtradas.length} de {inicial.length}</span>
       </div>
 
-      <div>
-        <Button onClick={abrirNueva}>
-          <span className="material-symbols-outlined">add</span>
-          Nueva propiedad
-        </Button>
-      </div>
-
       {/* ===== Grilla ===== */}
       <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
         {filtradas.map((p) => (
-          <PropiedadCard key={p.id} p={p} onToggle={() => toggleDisponible(p)} onEditar={() => abrirEditar(p)} />
+          <PropiedadCard
+            key={p.id}
+            p={p}
+            destacar={destacado === p.id}
+            nVisitas={visitasPorProp(p.id).length}
+            onToggle={() => toggleDisponible(p)}
+            onVerVisitas={() => setVisitasDe(p)}
+          />
         ))}
         {filtradas.length === 0 && (
           <div className="col-span-full rounded-2xl border border-dashed border-border p-10 text-center text-muted-foreground">
@@ -386,64 +371,43 @@ export default function PropiedadesClient({ inicial }: { inicial: Propiedad[] })
         )}
       </div>
 
-      {/* ===== Modal alta/edición ===== */}
+      {/* ===== Modal: visitas asociadas ===== */}
       <ResponsiveDialog
-        open={form !== null}
-        onOpenChange={(o) => { if (!o) cerrar(); }}
-        title={editId ? 'Editar propiedad' : 'Nueva propiedad'}
+        open={visitasDe !== null}
+        onOpenChange={(o) => { if (!o) setVisitasDe(null); }}
+        title="Visitas asociadas"
+        description={visitasDe?.direccion}
       >
-        {form && (
-          <div className="flex flex-col gap-4">
-            {error && (
-              <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-3.5 py-2.5 text-sm text-destructive">{error}</div>
+        {visitasDe && (
+          <div className="flex flex-col gap-2">
+            {visitasModal.length === 0 && (
+              <p className="py-4 text-sm text-muted-foreground">Esta propiedad no tiene visitas programadas.</p>
             )}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Título*"><Input value={form.titulo as string} onChange={(e) => set('titulo', e.target.value)} /></Field>
-              <Field label="Barrio*"><Input value={form.barrio as string} onChange={(e) => set('barrio', e.target.value)} /></Field>
-              <Field label="Tipo">
-                <Sel value={form.tipo as string} onChange={(v) => set('tipo', v)} options={TIPOS.map((t) => ({ value: t, label: t }))} />
-              </Field>
-              <Field label="Operación">
-                <Sel value={form.operacion as string} onChange={(v) => set('operacion', v)} options={OPERACIONES.map((o) => ({ value: o, label: o }))} />
-              </Field>
-              <Field label="Precio*"><Input type="number" value={form.precio as string} onChange={(e) => set('precio', e.target.value)} /></Field>
-              <Field label="Moneda">
-                <Sel value={form.moneda as string} onChange={(v) => set('moneda', v)} options={[{ value: 'ARS', label: 'ARS' }, { value: 'USD', label: 'USD' }]} />
-              </Field>
-              <Field label="Expensas"><Input type="number" value={form.expensas as string} onChange={(e) => set('expensas', e.target.value)} placeholder="vacío si no hay dato" /></Field>
-              <Field label="Ambientes"><Input type="number" value={form.ambientes as string} onChange={(e) => set('ambientes', e.target.value)} /></Field>
-              <Field label="Dormitorios"><Input type="number" value={form.dormitorios as string} onChange={(e) => set('dormitorios', e.target.value)} /></Field>
-              <Field label="Baños"><Input type="number" value={form.banos as string} onChange={(e) => set('banos', e.target.value)} /></Field>
-              <Field label="Superficie m²"><Input type="number" value={form.superficie_m2 as string} onChange={(e) => set('superficie_m2', e.target.value)} /></Field>
-              <Field label="Piso"><Input value={form.piso as string} onChange={(e) => set('piso', e.target.value)} /></Field>
-              <Field label="Dirección*" className="sm:col-span-2"><Input value={form.direccion as string} onChange={(e) => set('direccion', e.target.value)} /></Field>
-              <Field label="Requisitos garantía" className="sm:col-span-2"><Input value={form.requisitos_garantia as string} onChange={(e) => set('requisitos_garantia', e.target.value)} /></Field>
-              <Field label="Características (separadas por coma)" className="sm:col-span-2"><Input value={form.caracteristicas as string} onChange={(e) => set('caracteristicas', e.target.value)} /></Field>
-              <Field label="Descripción" className="sm:col-span-2"><Textarea value={form.descripcion as string} onChange={(e) => set('descripcion', e.target.value)} /></Field>
-              <Field label="Código de aviso"><Input value={form.codigo_aviso as string} onChange={(e) => set('codigo_aviso', e.target.value)} /></Field>
-              <Field label="URL de la publicación"><Input type="url" value={form.url_publica as string} onChange={(e) => set('url_publica', e.target.value)} placeholder="https://…" /></Field>
-              <Field label="Imágenes (una URL por línea, la primera es la principal)" className="sm:col-span-2">
-                <Textarea value={form.imagenes as string} onChange={(e) => set('imagenes', e.target.value)} />
-              </Field>
-              {thumbs.length > 0 && (
-                <div className="flex flex-wrap gap-2 sm:col-span-2">
-                  {thumbs.map((u, k) => (
-                    // eslint-disable-next-line @next/next/no-img-element -- vista previa de URLs externas
-                    <img key={`${u}-${k}`} src={u} alt={`Imagen ${k + 1}`} className={cn('h-16 w-[86px] rounded-lg border-2 border-transparent bg-muted object-cover', k === 0 && 'border-primary')} />
-                  ))}
+            {visitasModal.map((v) => {
+              const wa = waLink(v.telefono);
+              return (
+                <div key={v.id} className="flex items-center gap-3 rounded-xl border border-muted p-3">
+                  <Avatar className="size-10 shrink-0">
+                    <AvatarFallback className="bg-secondary font-display text-sm font-bold text-white">{inicialNombre(v.nombre_cliente)}</AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[14px] font-semibold">{v.nombre_cliente || 'Sin nombre'}</div>
+                    <div className="text-[12.5px] text-muted-foreground">{v.fecha_visita} · {v.hora_visita?.slice(0, 5)} hs</div>
+                  </div>
+                  <Badge className={cn('shrink-0 border-transparent capitalize', ESTADO_BADGE[v.estado] ?? 'bg-muted text-muted-foreground')}>{v.estado}</Badge>
+                  {wa && (
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      render={<a href={wa} target="_blank" rel="noreferrer" title="Contactar por WhatsApp" />}
+                      className="size-9 shrink-0 text-primary"
+                    >
+                      <span className="material-symbols-outlined">chat</span>
+                    </Button>
+                  )}
                 </div>
-              )}
-              <label className="flex items-center gap-2.5 text-sm font-medium">
-                <Checkbox checked={form.disponible as boolean} onCheckedChange={(v) => set('disponible', v === true)} /> Disponible
-              </label>
-              <label className="flex items-center gap-2.5 text-sm font-medium">
-                <Checkbox checked={form.destacado as boolean} onCheckedChange={(v) => set('destacado', v === true)} /> Destacado
-              </label>
-            </div>
-            <div className="flex justify-end gap-2.5 pt-2">
-              <Button variant="outline" onClick={cerrar}>Cancelar</Button>
-              <Button onClick={guardar} disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar'}</Button>
-            </div>
+              );
+            })}
           </div>
         )}
       </ResponsiveDialog>
@@ -466,28 +430,6 @@ function Stat({ n, k, tone }: { n: number; k: string; tone?: 'light' | 'accent' 
         {k}
       </div>
     </div>
-  );
-}
-
-function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
-  return (
-    <div className={cn('flex flex-col gap-1.5', className)}>
-      <Label className="text-[11px] font-bold uppercase tracking-[0.04em] text-muted-foreground">{label}</Label>
-      {children}
-    </div>
-  );
-}
-
-function Sel({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
-  return (
-    <Select value={value} onValueChange={(v) => onChange(v ?? '')}>
-      <SelectTrigger>
-        <SelectValue>{(v) => options.find((o) => o.value === v)?.label ?? String(v ?? '')}</SelectValue>
-      </SelectTrigger>
-      <SelectContent>
-        {options.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-      </SelectContent>
-    </Select>
   );
 }
 

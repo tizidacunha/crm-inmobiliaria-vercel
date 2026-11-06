@@ -1,15 +1,20 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { cn } from '@/lib/utils';
+import { asesorSchema, type AsesorForm } from '@/lib/validaciones';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { MultiSelect } from '@/components/ui/multi-select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { ResponsiveDialog } from '@/components/responsive-dialog';
 
 export type Asesor = {
@@ -22,7 +27,8 @@ export type Asesor = {
   activo: boolean;
 };
 
-const vacio = { nombre: '', email: '', telefono: '', sucursal: '', zonas: '', activo: true };
+const OTRA = '__otra__';
+const vacio: AsesorForm = { nombre: '', email: '', telefono: '', sucursal: '', zonas: [], activo: true };
 
 function iniciales(nombre: string) {
   const partes = String(nombre || '').trim().split(/\s+/).filter(Boolean);
@@ -32,36 +38,49 @@ function iniciales(nombre: string) {
 
 export default function AsesoresClient({ inicial }: { inicial: Asesor[] }) {
   const router = useRouter();
-  const [form, setForm] = useState<Record<string, unknown> | null>(null);
+  const [abierto, setAbierto] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
-  const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [nuevaSucursal, setNuevaSucursal] = useState(false);
 
-  function abrirNuevo() { setEditId(null); setForm({ ...vacio }); setError(null); }
-  function abrirEditar(a: Asesor) {
-    setEditId(a.id);
-    setForm({
-      nombre: a.nombre, email: a.email ?? '', telefono: a.telefono ?? '',
-      sucursal: a.sucursal, zonas: (a.zonas || []).join(', '), activo: a.activo,
-    });
-    setError(null);
+  // Opciones para los dropdowns, derivadas de los asesores existentes.
+  const sucursales = useMemo(
+    () => Array.from(new Set(inicial.map((a) => a.sucursal).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'es')),
+    [inicial]
+  );
+  const zonasOpts = useMemo(
+    () => Array.from(new Set(inicial.flatMap((a) => a.zonas || []).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'es')),
+    [inicial]
+  );
+
+  const form = useForm<AsesorForm>({ resolver: zodResolver(asesorSchema), defaultValues: vacio });
+
+  function abrirNuevo() {
+    setEditId(null); setError(null); setNuevaSucursal(false);
+    form.reset(vacio);
+    setAbierto(true);
   }
-  function cerrar() { setForm(null); setEditId(null); }
-  function set(k: string, v: unknown) { setForm((f) => ({ ...(f as object), [k]: v })); }
+  function abrirEditar(a: Asesor) {
+    setEditId(a.id); setError(null);
+    setNuevaSucursal(!!a.sucursal && !sucursales.includes(a.sucursal));
+    form.reset({
+      nombre: a.nombre, email: a.email ?? '', telefono: a.telefono ?? '',
+      sucursal: a.sucursal, zonas: a.zonas ?? [], activo: a.activo,
+    });
+    setAbierto(true);
+  }
 
-  async function guardar() {
-    if (!form) return;
-    setGuardando(true); setError(null);
+  const onSubmit = form.handleSubmit(async (values) => {
+    setError(null);
     const url = editId ? `/api/asesores/${editId}` : '/api/asesores';
     const res = await fetch(url, {
       method: editId ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
+      body: JSON.stringify(values),
     });
-    setGuardando(false);
     if (!res.ok) { const d = await res.json().catch(() => ({})); setError(d.error || 'Error al guardar'); return; }
-    cerrar(); router.refresh();
-  }
+    setAbierto(false); router.refresh();
+  });
 
   async function darDeBaja(a: Asesor) {
     await fetch(`/api/asesores/${a.id}`, { method: 'DELETE' });
@@ -151,44 +170,122 @@ export default function AsesoresClient({ inicial }: { inicial: Asesor[] }) {
       </div>
 
       <ResponsiveDialog
-        open={form !== null}
-        onOpenChange={(o) => { if (!o) cerrar(); }}
+        open={abierto}
+        onOpenChange={setAbierto}
         title={editId ? 'Editar asesor' : 'Nuevo asesor'}
       >
-        {form && (
-          <div className="flex flex-col gap-4">
+        <Form {...form}>
+          <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
             {error && (
               <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-3.5 py-2.5 text-sm text-destructive">{error}</div>
             )}
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Nombre*"><Input value={form.nombre as string} onChange={(e) => set('nombre', e.target.value)} /></Field>
-              <Field label="Sucursal*"><Input value={form.sucursal as string} onChange={(e) => set('sucursal', e.target.value)} /></Field>
-              <Field label="Zonas (separadas por coma)" className="sm:col-span-2">
-                <Input value={form.zonas as string} onChange={(e) => set('zonas', e.target.value)} placeholder="Palermo, Recoleta, Belgrano" />
-              </Field>
-              <Field label="Email"><Input value={form.email as string} onChange={(e) => set('email', e.target.value)} /></Field>
-              <Field label="Teléfono"><Input value={form.telefono as string} onChange={(e) => set('telefono', e.target.value)} /></Field>
-              <label className="flex items-center gap-2.5 text-sm font-medium sm:col-span-2">
-                <Checkbox checked={form.activo as boolean} onCheckedChange={(v) => set('activo', v === true)} />
-                Activo
-              </label>
+              <FormField
+                control={form.control}
+                name="nombre"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nombre*</FormLabel>
+                    <FormControl><Input {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="sucursal"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Sucursal*</FormLabel>
+                    <Select
+                      value={nuevaSucursal ? OTRA : field.value || ''}
+                      onValueChange={(v) => {
+                        if (v === OTRA) { setNuevaSucursal(true); field.onChange(''); }
+                        else { setNuevaSucursal(false); field.onChange(v ?? ''); }
+                      }}
+                    >
+                      <SelectTrigger aria-invalid={!!form.formState.errors.sucursal}>
+                        <SelectValue>{(v) => (v === OTRA ? 'Otra…' : String(v || 'Elegí una sucursal'))}</SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sucursales.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                        <SelectItem value={OTRA}>Otra…</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {nuevaSucursal && (
+                      <FormControl><Input placeholder="Nueva sucursal" {...field} /></FormControl>
+                    )}
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="zonas"
+                render={({ field }) => (
+                  <FormItem className="sm:col-span-2">
+                    <FormLabel>Zonas* (podés elegir varias)</FormLabel>
+                    <FormControl>
+                      <MultiSelect
+                        options={zonasOpts}
+                        value={field.value}
+                        onChange={field.onChange}
+                        placeholder="Elegí una o más zonas"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl><Input type="email" placeholder="nombre@dominio.com" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="telefono"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Teléfono</FormLabel>
+                    <FormControl><Input inputMode="tel" placeholder="5491144556611" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="activo"
+                render={({ field }) => (
+                  <FormItem className="sm:col-span-2">
+                    <label className="flex items-center gap-2.5 text-sm font-medium">
+                      <Checkbox checked={field.value} onCheckedChange={(v) => field.onChange(v === true)} />
+                      Activo
+                    </label>
+                  </FormItem>
+                )}
+              />
             </div>
             <div className="flex justify-end gap-2.5 pt-2">
-              <Button variant="outline" onClick={cerrar}>Cancelar</Button>
-              <Button onClick={guardar} disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar'}</Button>
+              <Button type="button" variant="outline" onClick={() => setAbierto(false)}>Cancelar</Button>
+              <Button type="submit" disabled={form.formState.isSubmitting}>
+                {form.formState.isSubmitting ? 'Guardando…' : 'Guardar'}
+              </Button>
             </div>
-          </div>
-        )}
+          </form>
+        </Form>
       </ResponsiveDialog>
-    </div>
-  );
-}
-
-function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
-  return (
-    <div className={cn('flex flex-col gap-1.5', className)}>
-      <Label className="text-[11px] font-bold uppercase tracking-[0.04em] text-muted-foreground">{label}</Label>
-      {children}
     </div>
   );
 }

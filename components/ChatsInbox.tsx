@@ -47,6 +47,11 @@ function diaLargo(d: Date) {
   return esHoy(d) ? `Hoy, ${base}` : base;
 }
 
+const waLink = (tel: string | null) => {
+  const d = (tel ?? '').replace(/\D/g, '');
+  return d.length >= 8 ? `https://wa.me/${d}` : null;
+};
+
 const fmtPrecio = (p: { precio: number; moneda: string }) =>
   `${p.moneda === 'USD' ? 'USD' : '$'} ${Number(p.precio).toLocaleString('es-AR', { maximumFractionDigits: 0 })}`;
 
@@ -76,7 +81,16 @@ function derivarContexto(mensajesCliente: string[], propiedades: any[]) {
     .sort((a, b) => Number(b.destacado) - Number(a.destacado));
   const sugerida = (barrio || operacion) ? candidatas[0] ?? null : null;
 
-  return { chips, sugerida };
+  return { chips, sugerida, barrio };
+}
+
+type Asesor = { id: number; nombre: string; telefono: string | null; sucursal: string; zonas: string[] };
+
+/* Asesor sugerido por zona: activo cuya zonas[] cubre el barrio detectado (misma lógica que el bot). */
+function asesorPorZona(asesores: Asesor[], barrio: string | null): Asesor | null {
+  if (!barrio) return null;
+  const b = barrio.toLowerCase();
+  return asesores.find((a) => (a.zonas || []).some((z) => String(z).toLowerCase() === b)) ?? null;
 }
 
 export default async function ChatsInbox({ selectedId }: { selectedId?: string }) {
@@ -123,12 +137,19 @@ export default async function ChatsInbox({ selectedId }: { selectedId?: string }
   );
   const phone = await resolvePhone(selected.userId);
 
-  const { rows: props } = await pool.query(`
-    SELECT id, titulo, operacion, precio, moneda, ambientes, barrio, disponible, destacado
-    FROM public.propiedades
-  `);
+  const [{ rows: props }, { rows: asesores }] = await Promise.all([
+    pool.query(`
+      SELECT id, titulo, operacion, precio, moneda, ambientes, barrio, disponible, destacado
+      FROM public.propiedades
+    `),
+    pool.query(`
+      SELECT id, nombre, telefono, sucursal, zonas
+      FROM public.asesores WHERE activo
+    `),
+  ]);
   const mensajesCliente = thread.filter((m) => m.role !== 'IA').map((m) => String(m.message || ''));
-  const { chips, sugerida } = derivarContexto(mensajesCliente, props);
+  const { chips, sugerida, barrio } = derivarContexto(mensajesCliente, props);
+  const asesor = asesorPorZona(asesores as Asesor[], barrio);
 
   let lastDay = '';
 
@@ -213,7 +234,37 @@ export default async function ChatsInbox({ selectedId }: { selectedId?: string }
             <div className="mb-4 mt-1.5 text-[13px] leading-relaxed text-secondary-foreground/60">
               {[sugerida.ambientes != null ? `${sugerida.ambientes} amb.` : null, sugerida.barrio].filter(Boolean).join(' · ')}
             </div>
-            <Button render={<Link href="/propiedades" />} className="w-full">Ver ficha</Button>
+            <Button render={<Link href={`/propiedades?id=${sugerida.id}`} />} className="w-full">Ver ficha</Button>
+          </Card>
+        )}
+
+        {selected.derivado && (
+          <Card className="gap-3 p-5">
+            <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Asesor asignado</div>
+            {asesor ? (
+              <>
+                <div className="flex items-center gap-3">
+                  <Avatar className="size-11 shrink-0">
+                    <AvatarFallback className="bg-secondary font-display text-sm font-bold text-white">{iniciales(asesor.nombre)}</AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0">
+                    <div className="truncate font-display text-base font-bold tracking-[-0.02em]">{asesor.nombre}</div>
+                    <div className="text-[12.5px] text-muted-foreground">{asesor.sucursal}{barrio ? ` · ${barrio}` : ''}</div>
+                  </div>
+                </div>
+                {waLink(asesor.telefono) && (
+                  <Button variant="outline" render={<a href={waLink(asesor.telefono)!} target="_blank" rel="noreferrer" />} className="w-full">
+                    <span className="material-symbols-outlined">chat</span>
+                    Contactar al asesor
+                  </Button>
+                )}
+                <p className="text-[12px] text-muted-foreground">Sugerido por la zona ({barrio}). Confirmá la asignación antes de derivar.</p>
+              </>
+            ) : (
+              <p className="text-[13px] text-muted-foreground">
+                No se detectó un asesor por zona{barrio ? ` para ${barrio}` : ''}. Asigná uno manualmente.
+              </p>
+            )}
           </Card>
         )}
       </aside>

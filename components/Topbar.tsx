@@ -1,9 +1,6 @@
 'use client';
 
-import Link from 'next/link';
 import { SidebarTrigger } from '@/components/ui/sidebar';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   DropdownMenu,
@@ -27,19 +24,7 @@ export default function Topbar() {
     <header className="sticky top-0 z-30 flex h-21 shrink-0 items-center gap-3 border-b border-border bg-background px-4 md:px-10">
       <SidebarTrigger className="md:hidden" />
 
-      <div className="relative w-full max-w-120">
-        <span className="material-symbols-outlined pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground">
-          search
-        </span>
-        <Input placeholder="Buscar por propiedad, cliente o código…" className="h-11 rounded-xl pl-11" />
-      </div>
-
       <div className="ml-auto flex items-center gap-2 md:gap-4">
-        <Button render={<Link href="/propiedades" />} className="rounded-xl">
-          <span className="material-symbols-outlined">add_circle</span>
-          <span className="hidden sm:inline">Nueva propiedad</span>
-        </Button>
-
         <DropdownMenu>
           <DropdownMenuTrigger
             render={

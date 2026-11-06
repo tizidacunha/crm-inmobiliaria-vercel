@@ -1,9 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import listPlugin from '@fullcalendar/list';
+import interactionPlugin from '@fullcalendar/interaction';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Card, CardContent } from '@/components/ui/card';
@@ -48,11 +50,15 @@ const ESTADO_BADGE: Record<string, string> = {
 };
 
 export default function CalendarClient({ visitas }: { visitas: Visita[] }) {
-  const [sel, setSel] = useState<Visita | null>(null);
   const isMobile = useIsMobile();
+  const params = useSearchParams();
 
   const hoy = new Date().toLocaleDateString('en-CA');
   const en7 = new Date(Date.now() + 7 * 864e5).toLocaleDateString('en-CA');
+
+  const [sel, setSel] = useState<Visita | null>(null);
+  // Día seleccionado (YYYY-MM-DD). Si venimos del resumen con ?dia=hoy, arranca en hoy.
+  const [diaSel, setDiaSel] = useState<string | null>(params.get('dia') === 'hoy' ? hoy : null);
   const kpi = {
     hoy: visitas.filter((v) => v.fecha_visita === hoy && v.estado !== 'cancelada').length,
     semana: visitas.filter((v) => v.fecha_visita >= hoy && v.fecha_visita <= en7 && v.estado !== 'cancelada').length,
@@ -61,6 +67,14 @@ export default function CalendarClient({ visitas }: { visitas: Visita[] }) {
   };
 
   const proximas = visitas.filter((v) => v.estado !== 'cancelada' && v.fecha_visita >= hoy).slice(0, 5);
+
+  const visitasDia = diaSel
+    ? visitas
+        .filter((v) => v.fecha_visita === diaSel)
+        .sort((a, b) => (a.hora_visita ?? '').localeCompare(b.hora_visita ?? ''))
+    : [];
+  const fmtDia = (d: string) =>
+    new Date(`${d}T00:00:00`).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
 
   const events = visitas.map((v) => {
     const c = colorDe(v.estado, v.fecha_visita === hoy);
@@ -105,8 +119,9 @@ export default function CalendarClient({ visitas }: { visitas: Visita[] }) {
           <CardContent>
             <FullCalendar
               key={isMobile ? 'list' : 'grid'}
-              plugins={[dayGridPlugin, listPlugin]}
+              plugins={[dayGridPlugin, listPlugin, interactionPlugin]}
               initialView={isMobile ? 'listWeek' : 'dayGridMonth'}
+              initialDate={diaSel ?? undefined}
               locale="es"
               firstDay={1}
               height="auto"
@@ -118,6 +133,7 @@ export default function CalendarClient({ visitas }: { visitas: Visita[] }) {
               }
               dayMaxEvents={3}
               events={events}
+              dateClick={(info) => { setDiaSel(info.dateStr); setSel(null); }}
               eventClick={(info) => setSel(info.event.extendedProps as Visita)}
               noEventsText="No hay visitas en este rango"
             />
@@ -134,9 +150,43 @@ export default function CalendarClient({ visitas }: { visitas: Visita[] }) {
 
         <Card className="lg:sticky lg:top-24 lg:self-start">
           <CardContent>
-            {!sel && (
+            {!sel && diaSel && (
+              <>
+                <div className="mb-3.5 flex items-start justify-between gap-2">
+                  <div>
+                    <h3 className="font-display text-xl font-bold capitalize tracking-[-0.02em]">{fmtDia(diaSel)}</h3>
+                    <p className="text-[12.5px] text-muted-foreground">{visitasDia.length} {visitasDia.length === 1 ? 'visita' : 'visitas'}</p>
+                  </div>
+                  <button onClick={() => setDiaSel(null)} className="shrink-0 text-[13px] font-bold text-cobalt">Próximas</button>
+                </div>
+                {visitasDia.length === 0 && (
+                  <p className="text-[13px] text-muted-foreground">No hay visitas este día.</p>
+                )}
+                <ul className="flex flex-col gap-1">
+                  {visitasDia.map((v) => (
+                    <li
+                      key={v.id}
+                      onClick={() => setSel(v)}
+                      className="flex cursor-pointer items-center gap-3 rounded-lg p-2.5 transition-colors hover:bg-muted"
+                    >
+                      <Avatar className="size-10">
+                        <AvatarFallback className="bg-secondary font-display text-sm font-bold text-white">{inicial(v.nombre_cliente)}</AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[13.5px] font-semibold">{v.propiedad_titulo ?? 'Visita'}</div>
+                        <div className="text-[12.5px] text-muted-foreground">{v.hora_visita?.slice(0, 5)} · {v.nombre_cliente || 'Sin nombre'}</div>
+                      </div>
+                      <Badge className={cn('shrink-0 border-transparent capitalize', ESTADO_BADGE[v.estado] ?? 'bg-muted text-muted-foreground')}>{v.estado}</Badge>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+
+            {!sel && !diaSel && (
               <>
                 <h3 className="mb-3.5 font-display text-xl font-bold tracking-[-0.02em]">Próximas visitas</h3>
+                <p className="mb-3 text-[12.5px] text-muted-foreground">Tocá un día del calendario para ver todas sus visitas.</p>
                 {proximas.length === 0 && (
                   <p className="text-[13px] text-muted-foreground">No hay visitas próximas. Hacé click en una del calendario para ver el detalle.</p>
                 )}

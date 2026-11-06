@@ -168,13 +168,13 @@ export default async function HomePage() {
           </p>
         )}
         <div className="mt-6 flex flex-wrap gap-3">
-          <Button render={<Link href="/visitas" />} className="bg-white text-secondary hover:bg-white/90">
+          <Button render={<Link href="/visitas?dia=hoy" />} className="bg-white text-secondary hover:bg-white/90">
             Ver agenda de hoy
           </Button>
           {derivaciones > 0 && (
             <Button
               variant="outline"
-              render={<Link href="/chats" />}
+              render={<Link href="/chats?filtro=derivados" />}
               className="border-white/25 bg-transparent text-white hover:bg-white/10 hover:text-white"
             >
               Revisar {derivaciones} {derivaciones === 1 ? 'derivación' : 'derivaciones'}
@@ -195,7 +195,7 @@ export default async function HomePage() {
             </CardContent>
           </Card>
         ))}
-        <Link href="/chats" className="contents">
+        <Link href="/chats?filtro=derivados" className="contents">
           <Card className="relative cursor-pointer gap-0 bg-primary py-5 text-primary-foreground ring-0 transition-transform hover:-translate-y-0.5">
             <CardContent className="flex flex-col gap-2.5">
               <span className="absolute right-5 top-5 size-2 rounded-full bg-secondary" />
