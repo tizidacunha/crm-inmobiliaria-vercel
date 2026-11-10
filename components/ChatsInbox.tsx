@@ -1,11 +1,12 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { pool } from '@/lib/db';
 import { resolvePhone } from '@/lib/waha';
 import { cn } from '@/lib/utils';
 import AutoRefresh from '@/components/AutoRefresh';
 import LeadList, { Lead } from '@/components/LeadList';
+import BusquedaFiltros from '@/components/BusquedaFiltros';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -55,33 +56,38 @@ const waLink = (tel: string | null) => {
 const fmtPrecio = (p: { precio: number; moneda: string }) =>
   `${p.moneda === 'USD' ? 'USD' : '$'} ${Number(p.precio).toLocaleString('es-AR', { maximumFractionDigits: 0 })}`;
 
-/* Deriva "qué busca" y una propiedad sugerida a partir de los mensajes del cliente. */
-function derivarContexto(mensajesCliente: string[], propiedades: any[]) {
-  const texto = mensajesCliente.join(' ').toLowerCase();
-  const chips: string[] = [];
+const sinTildes = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
-  let operacion: string | null = null;
-  if (/alquil/.test(texto)) { operacion = 'alquiler'; chips.push('Alquiler'); }
-  else if (/venta|comprar|compra\b/.test(texto)) { operacion = 'venta'; chips.push('Venta'); }
+/* Detecta qué busca el cliente (operación, ambientes, barrio) a partir de sus mensajes. */
+function detectarBusqueda(mensajesCliente: string[], barrios: string[]) {
+  const texto = sinTildes(mensajesCliente.join(' '));
 
-  if (/mono\s*ambiente/.test(texto)) chips.push('Monoambiente');
+  let operacion: 'Alquiler' | 'Venta' | null = null;
+  if (/alquil/.test(texto)) operacion = 'Alquiler';
+  else if (/venta|comprar|compra\b/.test(texto)) operacion = 'Venta';
+
+  let ambientes: string | null = null;
+  if (/mono\s*ambiente/.test(texto)) ambientes = 'Monoambiente';
   else {
     const amb = texto.match(/(\d+)\s*amb/);
-    if (amb) chips.push(`${amb[1]} ambientes`);
+    if (amb) ambientes = Number(amb[1]) >= 4 ? '4+ ambientes' : `${amb[1]} ambientes`;
   }
 
-  const barrios = Array.from(new Set(propiedades.map((p) => String(p.barrio || '')).filter(Boolean)));
-  const barrio = barrios.find((b) => texto.includes(b.toLowerCase())) || null;
-  if (barrio) chips.push(barrio);
+  // Barrios más largos primero ("Parque Chacabuco" antes que "Chacabuco").
+  const barrio = [...barrios].sort((a, b) => b.length - a.length).find((b) => texto.includes(sinTildes(b))) ?? null;
 
-  const candidatas = propiedades
+  return { operacion, ambientes, barrio };
+}
+
+/* Propiedad sugerida según la operación y el barrio detectados. */
+function propiedadSugerida(propiedades: any[], operacion: string | null, barrio: string | null) {
+  if (!barrio && !operacion) return null;
+  const op = operacion?.toLowerCase();
+  return propiedades
     .filter((p) => p.disponible)
-    .filter((p) => (!operacion || String(p.operacion).startsWith(operacion)))
+    .filter((p) => (!op || String(p.operacion).startsWith(op)))
     .filter((p) => (!barrio || String(p.barrio).toLowerCase() === barrio.toLowerCase()))
-    .sort((a, b) => Number(b.destacado) - Number(a.destacado));
-  const sugerida = (barrio || operacion) ? candidatas[0] ?? null : null;
-
-  return { chips, sugerida, barrio };
+    .sort((a, b) => Number(b.destacado) - Number(a.destacado))[0] ?? null;
 }
 
 type Asesor = { id: number; nombre: string; telefono: string | null; sucursal: string; zonas: string[] };
@@ -112,6 +118,34 @@ export default async function ChatsInbox({ selectedId }: { selectedId?: string }
   `);
   listRows.sort((a, b) => new Date(b.last_timestamp).getTime() - new Date(a.last_timestamp).getTime());
 
+  const [{ rows: props }, { rows: asesores }, { rows: mensajesClientes }] = await Promise.all([
+    pool.query(`
+      SELECT id, titulo, operacion, precio, moneda, ambientes, barrio, disponible, destacado
+      FROM public.propiedades
+    `),
+    pool.query(`
+      SELECT id, nombre, telefono, sucursal, zonas
+      FROM public.asesores WHERE activo
+    `),
+    pool.query(`
+      SELECT user_id, message
+      FROM public.conversaciones_inmobiliaria WHERE role <> 'IA'
+    `),
+  ]);
+
+  // Barrios conocidos: los de las propiedades + las zonas de los asesores.
+  const barrios = Array.from(new Set([
+    ...props.map((p) => String(p.barrio || '')),
+    ...asesores.flatMap((a) => (a.zonas || []).map(String)),
+  ].filter(Boolean)));
+
+  const mensajesPorUsuario = new Map<string, string[]>();
+  for (const m of mensajesClientes) {
+    const lista = mensajesPorUsuario.get(m.user_id) ?? [];
+    lista.push(String(m.message || ''));
+    mensajesPorUsuario.set(m.user_id, lista);
+  }
+
   const leads: Lead[] = await Promise.all(listRows.map(async (c) => {
     const real = c.user_name && c.user_name !== 'Usuario' ? c.user_name : null;
     const phone = real ? null : await resolvePhone(c.user_id);
@@ -121,6 +155,7 @@ export default async function ChatsInbox({ selectedId }: { selectedId?: string }
       userId: c.user_id, name, preview: c.last_message, time: horaCorta(c.last_timestamp),
       initials: iniciales(name), statusCls: st.cls, statusLabel: st.label,
       derivado: st.derivado, conVisita: st.conVisita,
+      ...detectarBusqueda(mensajesPorUsuario.get(c.user_id) ?? [], barrios),
     };
   }));
 
@@ -128,7 +163,10 @@ export default async function ChatsInbox({ selectedId }: { selectedId?: string }
     return <Card className="p-8"><p className="text-sm text-muted-foreground">Todavía no hay conversaciones.</p></Card>;
   }
 
-  const selected = leads.find((l) => l.userId === selectedId) ?? leads[0];
+  // Un chat inexistente (link viejo o tipeado a mano) vuelve a la bandeja en lugar de mostrar otro sin avisar.
+  const encontrado = leads.find((l) => l.userId === selectedId);
+  if (explicit && !encontrado) redirect('/chats');
+  const selected = encontrado ?? leads[0];
 
   const { rows: thread } = await pool.query(
     `SELECT user_id, user_name, message, role, timestamp, message_id
@@ -137,23 +175,20 @@ export default async function ChatsInbox({ selectedId }: { selectedId?: string }
   );
   const phone = await resolvePhone(selected.userId);
 
-  const [{ rows: props }, { rows: asesores }] = await Promise.all([
-    pool.query(`
-      SELECT id, titulo, operacion, precio, moneda, ambientes, barrio, disponible, destacado
-      FROM public.propiedades
-    `),
-    pool.query(`
-      SELECT id, nombre, telefono, sucursal, zonas
-      FROM public.asesores WHERE activo
-    `),
-  ]);
-  const mensajesCliente = thread.filter((m) => m.role !== 'IA').map((m) => String(m.message || ''));
-  const { chips, sugerida, barrio } = derivarContexto(mensajesCliente, props);
+  const { barrio } = selected;
+  const sugerida = propiedadSugerida(props, selected.operacion, barrio);
   const asesor = asesorPorZona(asesores as Asesor[], barrio);
 
   let lastDay = '';
 
+  const barriosOrdenados = [...barrios].sort((a, b) => a.localeCompare(b, 'es'));
+
   return (
+    <div className="flex flex-col gap-4">
+    {/* Pantallas chicas/medianas: la columna derecha no entra, los filtros van en un botón. */}
+    <div className={cn('xl:hidden', explicit && 'hidden lg:block xl:hidden')}>
+      <BusquedaFiltros modo="boton" leads={leads} barrios={barriosOrdenados} seleccionado={selected} />
+    </div>
     <div className="grid gap-5 lg:grid-cols-[330px_1fr] xl:grid-cols-[330px_1fr_300px]">
       <LeadList leads={leads} selectedId={selected.userId} className={cn(explicit && 'hidden lg:flex')} />
 
@@ -216,16 +251,7 @@ export default async function ChatsInbox({ selectedId }: { selectedId?: string }
       </Card>
 
       <aside className={cn('flex flex-col gap-4', 'hidden xl:flex')}>
-        {chips.length > 0 && (
-          <Card className="gap-3 p-5">
-            <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Qué busca</div>
-            <div className="flex flex-wrap gap-2">
-              {chips.map((c, i) => (
-                <Badge key={c} className={cn('border-transparent', i === 0 ? 'bg-secondary text-white' : 'bg-muted text-neutral-700')}>{c}</Badge>
-              ))}
-            </div>
-          </Card>
-        )}
+        <BusquedaFiltros leads={leads} barrios={barriosOrdenados} seleccionado={selected} />
 
         {sugerida && (
           <Card className="gap-0 bg-secondary p-5 text-secondary-foreground ring-0">
@@ -268,6 +294,7 @@ export default async function ChatsInbox({ selectedId }: { selectedId?: string }
           </Card>
         )}
       </aside>
+    </div>
     </div>
   );
 }

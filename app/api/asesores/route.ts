@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { pool } from '@/lib/db';
+import { validarAsesor, duplicadosAsesor } from '@/lib/asesores';
+import { leerJson } from '@/lib/api';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,20 +23,25 @@ export async function GET() {
 // Alta de asesor (con sucursal y una o varias zonas)
 export async function POST(req: NextRequest) {
   try {
-    const b = await req.json();
-    if (!b.nombre || !b.sucursal) {
-      return NextResponse.json({ error: 'Nombre y sucursal son obligatorios' }, { status: 400 });
+    const j = await leerJson(req);
+    if (!j.ok) return j.res;
+    const v = validarAsesor(j.body);
+    if (!v.ok) {
+      return NextResponse.json({ error: 'Revisá los datos del asesor', errores: v.errores }, { status: 400 });
     }
-    const zonas: string[] = Array.isArray(b.zonas)
-      ? b.zonas
-      : String(b.zonas || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+    const a = v.data;
+
+    // Email y teléfono no pueden repetirse entre asesores (a quién le llega cada derivación).
+    const { rows: existentes } = await pool.query(`SELECT id, email, telefono FROM public.asesores`);
+    const dup = duplicadosAsesor(a, existentes);
+    if (dup) return NextResponse.json({ error: 'Ya hay un asesor con esos datos', errores: dup }, { status: 409 });
 
     const { rows } = await pool.query(
       `INSERT INTO public.asesores (nombre, email, telefono, sucursal, zonas, activo)
        VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
-      [b.nombre, b.email || null, b.telefono || null, b.sucursal, zonas, b.activo ?? true]
+      [a.nombre, a.email, a.telefono, a.sucursal, a.zonas, a.activo]
     );
-    return NextResponse.json({ id: rows[0].id }, { status: 201 });
+    return NextResponse.json({ id: rows[0]?.id ?? null }, { status: 201 });
   } catch (err) {
     console.error('Error creando asesor:', err);
     return NextResponse.json({ error: 'No se pudo crear el asesor' }, { status: 500 });

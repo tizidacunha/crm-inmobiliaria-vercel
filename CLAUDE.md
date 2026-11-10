@@ -12,7 +12,8 @@
   (propiedades, asesores, visitas, conversaciones). No hay red ni Postgres.
 - `lib/waha.ts` → **mock**: `resolvePhone` formatea el número; sin fotos de perfil.
 - `lib/mock.ts` → dataset + accesores (`homeKpis`, `navCounts`, `proximasVisitas`, `chatsList`, `thread`, …).
-- Sin `pg`. Las `app/api/**` devuelven `{ ok: true }` (no persisten).
+- Sin `pg`. Las `app/api/**` **validan igual que en producción** (`lib/asesores.ts`, `lib/propiedades.ts`,
+  `lib/api.ts`: 400/404/409) pero no persisten; el mock devuelve 0 filas en UPDATE/DELETE de ids inexistentes.
 - **Login demo:** se muestran las credenciales en pantalla (`IS_DEMO`): `demo@horizonte.com` / `horizonte2026`.
 
 ## Stack y convenciones
@@ -26,7 +27,7 @@ convenciones** (son las mismas).
 npm run dev | build | start
 npm run lint        # next lint --max-warnings 0
 npm run typecheck   # tsc --noEmit
-npm run test        # vitest run  (tests de lib/auth y lib/mock)
+npm run test        # vitest run  (lib/*.test.ts + app/api/api.test.ts: validaciones y rutas de la API)
 ```
 
 ## Deploy
@@ -38,3 +39,7 @@ npm run test        # vitest run  (tests de lib/auth y lib/mock)
 - Config shadcn: `components.json` (base-maia, base-ui, icon `hugeicons`), `postcss.config.mjs`,
   `lib/utils.ts` (`cn`). `.agents/`, `.claude/`, `skills-lock.json` están gitignoreados (tooling de agentes).
 - Al cambiar la UI acá, **espejar al real** (`crm-frontend`) y deployar staging.
+- **Propiedades del demo = catálogo real de Goldstein Propiedades** (452, scrapeadas de goldsteinpropiedades.com),
+  en `lib/propiedades-goldstein.json`, cada una con su `url_publica`. El resto del demo sigue con la marca Horizonte.
+  Para actualizarlas: `node scripts/scrape-goldstein.mjs <crudo.json>` y `node scripts/goldstein-a-mock.mjs <crudo.json> lib/propiedades-goldstein.json`.
+  Chats y visitas se generan en `lib/mock.ts` (semilla fija) sobre esas propiedades.

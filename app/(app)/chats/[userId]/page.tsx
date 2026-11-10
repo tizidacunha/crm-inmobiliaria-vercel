@@ -1,10 +1,14 @@
 import ChatsInbox from '@/components/ChatsInbox';
 import LiveBadge from '@/components/LiveBadge';
+import { redirect } from 'next/navigation';
+import { decodificar } from '@/lib/api';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ChatThreadPage({ params }: { params: { userId: string } }) {
-  const userId = decodeURIComponent(params.userId);
+  // Id mal formado → a la bandeja (en vez de un error 500 por un % roto en la URL).
+  const userId = decodificar(params.userId);
+  if (!userId) redirect('/chats');
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between gap-3">

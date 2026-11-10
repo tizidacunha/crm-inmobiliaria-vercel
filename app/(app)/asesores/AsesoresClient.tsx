@@ -1,20 +1,21 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { asesorSchema, type AsesorForm } from '@/lib/validaciones';
+import {
+  SUCURSALES, ZONAS_POR_SUCURSAL, validarAsesor, limpiarNombre, telefonoLocal, formatearTelefono,
+  type ErroresAsesor,
+} from '@/lib/asesores';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { MultiSelect } from '@/components/ui/multi-select';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { ResponsiveDialog } from '@/components/responsive-dialog';
 
 export type Asesor = {
@@ -27,8 +28,16 @@ export type Asesor = {
   activo: boolean;
 };
 
-const OTRA = '__otra__';
-const vacio: AsesorForm = { nombre: '', email: '', telefono: '', sucursal: '', zonas: [], activo: true };
+type FormAsesor = {
+  nombre: string;
+  email: string;
+  telefono: string; // solo los 10 dígitos locales
+  sucursal: string;
+  zonas: string[];
+  activo: boolean;
+};
+
+const vacio: FormAsesor = { nombre: '', email: '', telefono: '', sucursal: '', zonas: [], activo: true };
 
 function iniciales(nombre: string) {
   const partes = String(nombre || '').trim().split(/\s+/).filter(Boolean);
@@ -36,61 +45,113 @@ function iniciales(nombre: string) {
   return (partes[0]?.slice(0, 2) || '?').toUpperCase();
 }
 
+function ErrorCampo({ msg, hint }: { msg?: string; hint?: string }) {
+  if (msg) return <p className="text-[12.5px] font-medium text-destructive">{msg}</p>;
+  if (hint) return <p className="text-[12.5px] text-muted-foreground">{hint}</p>;
+  return null;
+}
+
 export default function AsesoresClient({ inicial }: { inicial: Asesor[] }) {
   const router = useRouter();
-  const [abierto, setAbierto] = useState(false);
+  const [form, setForm] = useState<FormAsesor | null>(null);
   const [editId, setEditId] = useState<number | null>(null);
+  const [zonasPrevias, setZonasPrevias] = useState<string[]>([]);
+  const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [nuevaSucursal, setNuevaSucursal] = useState(false);
+  const [errores, setErrores] = useState<ErroresAsesor>({});
+  const [intentado, setIntentado] = useState(false);
 
-  // Opciones para los dropdowns, derivadas de los asesores existentes.
-  const sucursales = useMemo(
-    () => Array.from(new Set(inicial.map((a) => a.sucursal).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'es')),
-    [inicial]
-  );
-  const zonasOpts = useMemo(
-    () => Array.from(new Set(inicial.flatMap((a) => a.zonas || []).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'es')),
-    [inicial]
-  );
-
-  const form = useForm<AsesorForm>({ resolver: zodResolver(asesorSchema), defaultValues: vacio });
-
-  function abrirNuevo() {
-    setEditId(null); setError(null); setNuevaSucursal(false);
-    form.reset(vacio);
-    setAbierto(true);
-  }
+  function reset() { setError(null); setErrores({}); setIntentado(false); }
+  function abrirNuevo() { setEditId(null); setZonasPrevias([]); setForm({ ...vacio }); reset(); }
   function abrirEditar(a: Asesor) {
-    setEditId(a.id); setError(null);
-    setNuevaSucursal(!!a.sucursal && !sucursales.includes(a.sucursal));
-    form.reset({
-      nombre: a.nombre, email: a.email ?? '', telefono: a.telefono ?? '',
-      sucursal: a.sucursal, zonas: a.zonas ?? [], activo: a.activo,
+    setEditId(a.id);
+    setZonasPrevias(a.zonas || []);
+    setForm({
+      nombre: a.nombre, email: a.email ?? '', telefono: telefonoLocal(a.telefono),
+      sucursal: a.sucursal, zonas: a.zonas || [], activo: a.activo,
     });
-    setAbierto(true);
+    reset();
+  }
+  function cerrar() { setForm(null); setEditId(null); }
+
+  function actualizar(cambios: Partial<FormAsesor>) {
+    if (!form) return;
+    const nuevo = { ...form, ...cambios };
+    setForm(nuevo);
+    // Después del primer intento de guardar, los errores se recalculan mientras corrige.
+    if (intentado) {
+      const v = validarAsesor(nuevo, zonasPrevias);
+      setErrores(v.ok ? {} : v.errores);
+    }
   }
 
-  const onSubmit = form.handleSubmit(async (values) => {
-    setError(null);
+  function cambiarSucursal(sucursal: string) {
+    if (!form) return;
+    const permitidas = new Set([...(ZONAS_POR_SUCURSAL[sucursal] ?? []), ...zonasPrevias]);
+    actualizar({ sucursal, zonas: form.zonas.filter((z) => permitidas.has(z)) });
+  }
+
+  function toggleZona(z: string) {
+    if (!form) return;
+    actualizar({ zonas: form.zonas.includes(z) ? form.zonas.filter((x) => x !== z) : [...form.zonas, z] });
+  }
+
+  async function guardar(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form) return;
+    setIntentado(true);
+    const v = validarAsesor(form, zonasPrevias);
+    if (!v.ok) { setErrores(v.errores); setError(null); return; }
+    setErrores({});
+    setGuardando(true); setError(null);
     const url = editId ? `/api/asesores/${editId}` : '/api/asesores';
-    const res = await fetch(url, {
-      method: editId ? 'PUT' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(values),
-    });
-    if (!res.ok) { const d = await res.json().catch(() => ({})); setError(d.error || 'Error al guardar'); return; }
-    setAbierto(false); router.refresh();
-  });
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: editId ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(v.data),
+      });
+    } catch {
+      setError('No se pudo conectar. Intentá de nuevo.');
+      return;
+    } finally {
+      setGuardando(false);
+    }
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      if (d.errores) setErrores(d.errores);
+      setError(d.error || 'Error al guardar');
+      return;
+    }
+    cerrar(); router.refresh();
+  }
 
   async function darDeBaja(a: Asesor) {
-    await fetch(`/api/asesores/${a.id}`, { method: 'DELETE' });
-    router.refresh();
+    if (!window.confirm(`¿Dar de baja a ${a.nombre}? Deja de recibir derivaciones.`)) return;
+    try {
+      const res = await fetch(`/api/asesores/${a.id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        toast.error(d.error || 'No se pudo dar de baja al asesor');
+        return;
+      }
+      toast.success(`${a.nombre} quedó dado de baja`);
+      router.refresh();
+    } catch {
+      toast.error('No se pudo conectar. Intentá de nuevo.');
+    }
   }
 
   const waLink = (tel: string | null) => {
     const d = (tel ?? '').replace(/\D/g, '');
     return d.length >= 8 ? `https://wa.me/${d}` : null;
   };
+
+  // Zonas a mostrar: las de la sucursal elegida + las que ya tenga marcadas (registros viejos).
+  const zonasVisibles = form?.sucursal
+    ? Array.from(new Set([...(ZONAS_POR_SUCURSAL[form.sucursal] ?? []), ...form.zonas]))
+    : [];
 
   return (
     <div className="flex flex-col gap-6">
@@ -170,121 +231,123 @@ export default function AsesoresClient({ inicial }: { inicial: Asesor[] }) {
       </div>
 
       <ResponsiveDialog
-        open={abierto}
-        onOpenChange={setAbierto}
+        open={!!form}
+        onOpenChange={(o) => { if (!o) cerrar(); }}
         title={editId ? 'Editar asesor' : 'Nuevo asesor'}
       >
-        <Form {...form}>
-          <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
+        {form && (
+          <form onSubmit={guardar} noValidate className="flex flex-col gap-4">
             {error && (
               <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-3.5 py-2.5 text-sm text-destructive">{error}</div>
             )}
             <div className="grid gap-4 sm:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="nombre"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nombre*</FormLabel>
-                    <FormControl><Input {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="as-nombre">Nombre y apellido*</Label>
+                <Input
+                  id="as-nombre"
+                  value={form.nombre}
+                  onChange={(e) => actualizar({ nombre: limpiarNombre(e.target.value) })}
+                  maxLength={60}
+                  autoComplete="name"
+                  placeholder="Ej: Lucía Martínez"
+                  aria-invalid={!!errores.nombre}
+                />
+                <ErrorCampo msg={errores.nombre} />
+              </div>
 
-              <FormField
-                control={form.control}
-                name="sucursal"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Sucursal*</FormLabel>
-                    <Select
-                      value={nuevaSucursal ? OTRA : field.value || ''}
-                      onValueChange={(v) => {
-                        if (v === OTRA) { setNuevaSucursal(true); field.onChange(''); }
-                        else { setNuevaSucursal(false); field.onChange(v ?? ''); }
-                      }}
-                    >
-                      <SelectTrigger aria-invalid={!!form.formState.errors.sucursal}>
-                        <SelectValue>{(v) => (v === OTRA ? 'Otra…' : String(v || 'Elegí una sucursal'))}</SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {sucursales.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                        <SelectItem value={OTRA}>Otra…</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {nuevaSucursal && (
-                      <FormControl><Input placeholder="Nueva sucursal" {...field} /></FormControl>
-                    )}
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div className="flex flex-col gap-2">
+                <Label>Sucursal*</Label>
+                <Select value={form.sucursal} onValueChange={(v) => cambiarSucursal(String(v ?? ''))}>
+                  <SelectTrigger className="w-full" aria-invalid={!!errores.sucursal}>
+                    <SelectValue>{(v) => String(v || 'Elegí una sucursal')}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SUCURSALES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <ErrorCampo msg={errores.sucursal} />
+              </div>
 
-              <FormField
-                control={form.control}
-                name="zonas"
-                render={({ field }) => (
-                  <FormItem className="sm:col-span-2">
-                    <FormLabel>Zonas* (podés elegir varias)</FormLabel>
-                    <FormControl>
-                      <MultiSelect
-                        options={zonasOpts}
-                        value={field.value}
-                        onChange={field.onChange}
-                        placeholder="Elegí una o más zonas"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
+              <div className="flex flex-col gap-2 sm:col-span-2">
+                <Label>
+                  Zonas*
+                  {form.sucursal && (
+                    <span className="font-normal text-muted-foreground">
+                      · {form.zonas.length} elegida{form.zonas.length === 1 ? '' : 's'}
+                    </span>
+                  )}
+                </Label>
+                {!form.sucursal ? (
+                  <div className="rounded-xl border border-dashed border-border px-3.5 py-3 text-sm text-muted-foreground">
+                    Elegí primero una sucursal para ver sus zonas.
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {zonasVisibles.map((z) => {
+                      const on = form.zonas.includes(z);
+                      return (
+                        <Button
+                          key={z}
+                          type="button"
+                          size="sm"
+                          variant={on ? 'secondary' : 'outline'}
+                          aria-pressed={on}
+                          onClick={() => toggleZona(z)}
+                        >
+                          {on && <span className="material-symbols-outlined text-[16px]">check</span>}
+                          {z}
+                        </Button>
+                      );
+                    })}
+                  </div>
                 )}
-              />
+                <ErrorCampo msg={errores.zonas} />
+              </div>
 
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email</FormLabel>
-                    <FormControl><Input type="email" placeholder="nombre@dominio.com" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="as-email">Email*</Label>
+                <Input
+                  id="as-email"
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => actualizar({ email: e.target.value.replace(/\s/g, '').toLowerCase() })}
+                  maxLength={100}
+                  autoComplete="email"
+                  placeholder="nombre@horizonte.com"
+                  aria-invalid={!!errores.email}
+                />
+                <ErrorCampo msg={errores.email} />
+              </div>
 
-              <FormField
-                control={form.control}
-                name="telefono"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Teléfono</FormLabel>
-                    <FormControl><Input inputMode="tel" placeholder="5491144556611" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="as-tel">Teléfono (WhatsApp)*</Label>
+                <div className="flex items-center gap-2">
+                  <span className="shrink-0 text-sm font-semibold text-muted-foreground">+54 9</span>
+                  <Input
+                    id="as-tel"
+                    type="tel"
+                    inputMode="numeric"
+                    value={formatearTelefono(form.telefono)}
+                    onChange={(e) => actualizar({ telefono: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                    autoComplete="tel-national"
+                    placeholder="11 2345-6789"
+                    aria-invalid={!!errores.telefono}
+                  />
+                </div>
+                <ErrorCampo msg={errores.telefono} hint="Código de área sin 0 y número sin 15" />
+              </div>
 
-              <FormField
-                control={form.control}
-                name="activo"
-                render={({ field }) => (
-                  <FormItem className="sm:col-span-2">
-                    <label className="flex items-center gap-2.5 text-sm font-medium">
-                      <Checkbox checked={field.value} onCheckedChange={(v) => field.onChange(v === true)} />
-                      Activo
-                    </label>
-                  </FormItem>
-                )}
-              />
+              <label className="flex items-center gap-2.5 text-sm font-medium sm:col-span-2">
+                <Checkbox checked={form.activo} onCheckedChange={(v) => actualizar({ activo: v === true })} />
+                Activo
+              </label>
             </div>
             <div className="flex justify-end gap-2.5 pt-2">
-              <Button type="button" variant="outline" onClick={() => setAbierto(false)}>Cancelar</Button>
-              <Button type="submit" disabled={form.formState.isSubmitting}>
-                {form.formState.isSubmitting ? 'Guardando…' : 'Guardar'}
-              </Button>
+              <Button type="button" variant="outline" onClick={cerrar}>Cancelar</Button>
+              <Button type="submit" disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar'}</Button>
             </div>
           </form>
-        </Form>
+        )}
       </ResponsiveDialog>
     </div>
   );

@@ -45,7 +45,7 @@ export default function LoginForm() {
             <FormItem>
               <FormLabel className="text-xs font-bold uppercase tracking-[0.06em] text-muted-foreground">Email</FormLabel>
               <FormControl>
-                <Input type="email" autoComplete="username" placeholder="nombre@horizonte.com" autoFocus className="h-12" {...field} />
+                <Input type="email" autoComplete="username" placeholder="nombre@horizonte.com" maxLength={254} autoFocus className="h-12" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -58,7 +58,7 @@ export default function LoginForm() {
             <FormItem>
               <FormLabel className="text-xs font-bold uppercase tracking-[0.06em] text-muted-foreground">Contraseña</FormLabel>
               <FormControl>
-                <Input type="password" autoComplete="current-password" placeholder="••••••••" className="h-12" {...field} />
+                <Input type="password" autoComplete="current-password" placeholder="••••••••" maxLength={200} className="h-12" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { pool } from '@/lib/db';
+import { leerJson } from '@/lib/api';
+import { validarPropiedad } from '@/lib/propiedades';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,19 +24,14 @@ export async function GET() {
   }
 }
 
-// Alta de propiedad
+// Alta de propiedad (validada y normalizada con validarPropiedad)
 export async function POST(req: NextRequest) {
   try {
-    const b = await req.json();
-    if (!b.titulo || !b.tipo || !b.operacion || b.precio == null || !b.direccion || !b.barrio) {
-      return NextResponse.json({ error: 'Faltan campos obligatorios' }, { status: 400 });
-    }
-    const caracteristicas: string[] = Array.isArray(b.caracteristicas)
-      ? b.caracteristicas
-      : String(b.caracteristicas || '').split(',').map((s: string) => s.trim()).filter(Boolean);
-    const imagenes: string[] = Array.isArray(b.imagenes)
-      ? b.imagenes
-      : String(b.imagenes || '').split(/\s+/).map((s: string) => s.trim()).filter(Boolean);
+    const j = await leerJson(req);
+    if (!j.ok) return j.res;
+    const v = validarPropiedad(j.body);
+    if (!v.ok) return NextResponse.json({ error: 'Revisá los datos de la propiedad', errores: v.errores }, { status: 400 });
+    const p = v.data;
 
     const { rows } = await pool.query(
       `INSERT INTO public.propiedades
@@ -45,15 +42,13 @@ export async function POST(req: NextRequest) {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
        RETURNING id`,
       [
-        b.titulo, b.descripcion || null, b.tipo, b.operacion, b.precio, b.moneda || 'USD',
-        b.ambientes ?? null, b.dormitorios ?? null, b.banos ?? null, b.superficie_m2 ?? null,
-        b.piso || null, b.direccion, b.barrio, b.ciudad || 'Buenos Aires', caracteristicas,
-        b.expensas ?? null, b.requisitos_garantia || null,
-        b.disponible ?? true, b.destacado ?? false,
-        b.codigo_aviso || null, b.url_publica || null, b.imagen_principal || imagenes[0] || null, imagenes,
+        p.titulo, p.descripcion, p.tipo, p.operacion, p.precio, p.moneda,
+        p.ambientes, p.dormitorios, p.banos, p.superficie_m2, p.piso,
+        p.direccion, p.barrio, p.ciudad, p.caracteristicas, p.expensas, p.requisitos_garantia,
+        p.disponible, p.destacado, p.codigo_aviso, p.url_publica, p.imagen_principal, p.imagenes,
       ]
     );
-    return NextResponse.json({ id: rows[0].id }, { status: 201 });
+    return NextResponse.json({ id: rows[0]?.id ?? null }, { status: 201 });
   } catch (err) {
     console.error('Error creando propiedad:', err);
     return NextResponse.json({ error: 'No se pudo crear la propiedad' }, { status: 500 });

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -56,6 +57,7 @@ const OPERACION_LABEL: Record<string, string> = {
 };
 const TIPO_LABEL: Record<string, string> = {
   departamento: 'Departamento', casa: 'Casa', ph: 'PH', local: 'Local',
+  oficina: 'Oficina', terreno: 'Terreno', cochera: 'Cochera', galpon: 'Galpón', edificio: 'Edificio comercial',
 };
 const ESTADO_BADGE: Record<string, string> = {
   confirmada: 'bg-secondary text-white',
@@ -63,6 +65,8 @@ const ESTADO_BADGE: Record<string, string> = {
   pendiente: 'bg-accent text-accent-foreground',
   cancelada: 'bg-muted text-muted-foreground',
 };
+
+const POR_PAGINA = 24;
 
 const fmt = (n: number | string) => Number(n).toLocaleString('es-AR', { maximumFractionDigits: 2 });
 const precioTexto = (p: Propiedad) => `${p.moneda === 'USD' ? 'USD' : '$'} ${fmt(p.precio)}`;
@@ -250,6 +254,17 @@ export default function PropiedadesClient({ inicial, visitas }: { inicial: Propi
   // Resaltar la propiedad que llega desde la ficha de un chat (/propiedades?id=…)
   const idParam = params.get('id');
   const [destacado, setDestacado] = useState<number | null>(idParam ? Number(idParam) : null);
+
+  // Carga progresiva: con cientos de propiedades, dibujar todas las tarjetas juntas hace la página muy pesada.
+  // Si se llega con ?id=…, se muestran de entrada las tandas necesarias para que esa propiedad esté visible.
+  const [limite, setLimite] = useState(() => {
+    const i = idParam ? inicial.findIndex((p) => p.id === Number(idParam)) : -1;
+    return Math.max(POR_PAGINA, Math.ceil((i + 1) / POR_PAGINA) * POR_PAGINA);
+  });
+  // Al cambiar filtros/orden/búsqueda se vuelve a la primera tanda.
+  const claveFiltro = [filtroOp, filtroBarrio, orden, busqueda].join('|');
+  const [claveAnterior, setClaveAnterior] = useState(claveFiltro);
+  if (claveAnterior !== claveFiltro) { setClaveAnterior(claveFiltro); setLimite(POR_PAGINA); }
   useEffect(() => {
     if (destacado == null) return;
     document.getElementById(`propiedad-${destacado}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -279,12 +294,22 @@ export default function PropiedadesClient({ inicial, visitas }: { inicial: Propi
     );
 
   async function toggleDisponible(p: Propiedad) {
-    await fetch(`/api/propiedades/${p.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ disponible: !p.disponible }),
-    });
-    router.refresh();
+    try {
+      const res = await fetch(`/api/propiedades/${p.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ disponible: !p.disponible }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        toast.error(d.error || 'No se pudo cambiar la disponibilidad');
+        return;
+      }
+      toast.success(p.disponible ? 'Marcada como no disponible' : 'Marcada como disponible');
+      router.refresh();
+    } catch {
+      toast.error('No se pudo conectar. Intentá de nuevo.');
+    }
   }
 
   const visitasModal = visitasDe ? visitasPorProp(visitasDe.id) : [];
@@ -322,6 +347,7 @@ export default function PropiedadesClient({ inicial, visitas }: { inicial: Propi
 
         <Input
           type="search"
+          maxLength={100}
           placeholder="Dirección, barrio o código…"
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
@@ -354,7 +380,7 @@ export default function PropiedadesClient({ inicial, visitas }: { inicial: Propi
 
       {/* ===== Grilla ===== */}
       <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-        {filtradas.map((p) => (
+        {filtradas.slice(0, limite).map((p) => (
           <PropiedadCard
             key={p.id}
             p={p}
@@ -370,6 +396,17 @@ export default function PropiedadesClient({ inicial, visitas }: { inicial: Propi
           </div>
         )}
       </div>
+
+      {filtradas.length > limite && (
+        <div className="flex flex-col items-center gap-2">
+          <Button variant="outline" onClick={() => setLimite((n) => n + POR_PAGINA)}>
+            Ver más propiedades
+          </Button>
+          <span className="text-[12.5px] text-muted-foreground">
+            Mostrando {limite} de {filtradas.length}
+          </span>
+        </div>
+      )}
 
       {/* ===== Modal: visitas asociadas ===== */}
       <ResponsiveDialog

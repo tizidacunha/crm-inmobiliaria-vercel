@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { homeKpis, navCounts, proximasVisitas, chatsList, thread, propiedades } from './mock';
+import { homeKpis, navCounts, proximasVisitas, chatsList, thread, propiedades, visitas } from './mock';
 
 describe('mock accessors', () => {
   it('homeKpis suma alquiler + venta = propiedades activas', () => {
@@ -18,6 +18,14 @@ describe('mock accessors', () => {
     const v = proximasVisitas(6);
     expect(v.length).toBeLessThanOrEqual(6);
     if (v.length) expect(v[0]).toHaveProperty('propiedad_titulo');
+  });
+
+  it('la demo está poblada: ~90 propiedades, 40+ chats y agenda cargada', () => {
+    expect(propiedades.length).toBeGreaterThanOrEqual(85);
+    expect(new Set(propiedades.map((p) => p.id)).size).toBe(propiedades.length);
+    expect(chatsList().length).toBeGreaterThanOrEqual(40);
+    expect(visitas.length).toBeGreaterThan(200);
+    expect(new Set(visitas.map((v) => v.id)).size).toBe(visitas.length);
   });
 
   it('thread devuelve mensajes ordenados por timestamp para un usuario', () => {

@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { cumpleBusqueda } from '@/components/BusquedaFiltros';
 
 export type Lead = {
   userId: string;
@@ -20,6 +21,10 @@ export type Lead = {
   statusLabel: string;
   derivado: boolean;
   conVisita: boolean;
+  // Lo que busca el cliente, detectado de sus mensajes (para los filtros de búsqueda).
+  operacion: string | null;
+  ambientes: string | null;
+  barrio: string | null;
 };
 
 type Filtro = 'todos' | 'derivados' | 'visita';
@@ -40,25 +45,28 @@ export default function LeadList({ leads, selectedId, className }: { leads: Lead
   const [filtro, setFiltro] = useState<Filtro>(filtroInicial);
 
   const query = q.trim().toLowerCase();
-  const visibles = leads.filter((l) => {
+  const porBusqueda = leads.filter((l) => cumpleBusqueda(l, params));
+  const visibles = porBusqueda.filter((l) => {
     if (filtro === 'derivados' && !l.derivado) return false;
     if (filtro === 'visita' && !l.conVisita) return false;
     if (query && !(`${l.name} ${l.preview}`.toLowerCase().includes(query))) return false;
     return true;
   });
 
-  const nDeriv = leads.filter((l) => l.derivado).length;
-  const nVisita = leads.filter((l) => l.conVisita).length;
+  const nDeriv = porBusqueda.filter((l) => l.derivado).length;
+  const nVisita = porBusqueda.filter((l) => l.conVisita).length;
+  // Mantiene los filtros de búsqueda al abrir otro chat.
+  const qs = params.toString();
 
   return (
     <Card className={cn('flex max-h-[calc(100vh-150px)] gap-0 p-0', className)}>
       <div className="relative px-4 pb-2.5 pt-4">
         <span className="material-symbols-outlined pointer-events-none absolute left-7 top-[26px] text-[19px] text-muted-foreground">search</span>
-        <Input placeholder="Filtrar…" value={q} onChange={(e) => setQ(e.target.value)} className="h-10 bg-muted pl-10" />
+        <Input placeholder="Filtrar…" maxLength={100} value={q} onChange={(e) => setQ(e.target.value)} className="h-10 bg-muted pl-10" />
       </div>
       <div className="border-b border-muted px-4 pb-3.5">
         <ToggleGroup value={[filtro]} onValueChange={(v) => setFiltro((v[0] as Filtro) ?? 'todos')} variant="outline" className="flex-wrap">
-          <ToggleGroupItem value="todos" className="aria-pressed:bg-secondary aria-pressed:text-white">Todos {leads.length}</ToggleGroupItem>
+          <ToggleGroupItem value="todos" className="aria-pressed:bg-secondary aria-pressed:text-white">Todos {porBusqueda.length}</ToggleGroupItem>
           <ToggleGroupItem value="derivados" className="aria-pressed:bg-secondary aria-pressed:text-white">Derivados {nDeriv}</ToggleGroupItem>
           <ToggleGroupItem value="visita" className="aria-pressed:bg-secondary aria-pressed:text-white">Con visita {nVisita}</ToggleGroupItem>
         </ToggleGroup>
@@ -70,7 +78,7 @@ export default function LeadList({ leads, selectedId, className }: { leads: Lead
           return (
             <button
               key={l.userId}
-              onClick={() => router.push(`/chats/${encodeURIComponent(l.userId)}`)}
+              onClick={() => router.push(`/chats/${encodeURIComponent(l.userId)}${qs ? `?${qs}` : ''}`)}
               className={cn('flex w-full gap-3 border-b border-muted px-4 py-3.5 text-left transition-colors hover:bg-muted', on && 'bg-accent hover:bg-accent')}
             >
               <Avatar className="size-10 shrink-0">

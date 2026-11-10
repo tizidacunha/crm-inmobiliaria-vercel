@@ -1,18 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { pool } from '@/lib/db';
+import { leerJson, idValido, idInvalido } from '@/lib/api';
+import { validarPropiedad, booleano } from '@/lib/propiedades';
 
 export const dynamic = 'force-dynamic';
 
-// Edición de propiedad
+// Edición de propiedad (validada y normalizada con validarPropiedad)
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const b = await req.json();
-    const caracteristicas: string[] = Array.isArray(b.caracteristicas)
-      ? b.caracteristicas
-      : String(b.caracteristicas || '').split(',').map((s: string) => s.trim()).filter(Boolean);
-    const imagenes: string[] = Array.isArray(b.imagenes)
-      ? b.imagenes
-      : String(b.imagenes || '').split(/\s+/).map((s: string) => s.trim()).filter(Boolean);
+    const id = idValido(params.id);
+    if (!id) return idInvalido();
+    const j = await leerJson(req);
+    if (!j.ok) return j.res;
+    const v = validarPropiedad(j.body);
+    if (!v.ok) return NextResponse.json({ error: 'Revisá los datos de la propiedad', errores: v.errores }, { status: 400 });
+    const p = v.data;
 
     const { rowCount } = await pool.query(
       `UPDATE public.propiedades SET
@@ -23,13 +25,11 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
          codigo_aviso=$20, url_publica=$21, imagen_principal=$22, imagenes=$23, actualizado_en=now()
        WHERE id=$24`,
       [
-        b.titulo, b.descripcion || null, b.tipo, b.operacion, b.precio, b.moneda || 'USD',
-        b.ambientes ?? null, b.dormitorios ?? null, b.banos ?? null, b.superficie_m2 ?? null,
-        b.piso || null, b.direccion, b.barrio, b.ciudad || 'Buenos Aires', caracteristicas,
-        b.expensas ?? null, b.requisitos_garantia || null,
-        b.disponible ?? true, b.destacado ?? false,
-        b.codigo_aviso || null, b.url_publica || null, b.imagen_principal || imagenes[0] || null, imagenes,
-        params.id,
+        p.titulo, p.descripcion, p.tipo, p.operacion, p.precio, p.moneda,
+        p.ambientes, p.dormitorios, p.banos, p.superficie_m2, p.piso,
+        p.direccion, p.barrio, p.ciudad, p.caracteristicas, p.expensas, p.requisitos_garantia,
+        p.disponible, p.destacado, p.codigo_aviso, p.url_publica, p.imagen_principal, p.imagenes,
+        id,
       ]
     );
     if (!rowCount) return NextResponse.json({ error: 'No existe' }, { status: 404 });
@@ -43,13 +43,21 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 // HU-05: marcar disponible / no disponible en un clic
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const { disponible } = await req.json();
+    const id = idValido(params.id);
+    if (!id) return idInvalido();
+    const j = await leerJson(req);
+    if (!j.ok) return j.res;
+    // Obligatorio y booleano estricto: "no", 0 o ausente no se interpretan como true/false.
+    const disponible = j.body.disponible === undefined ? undefined : booleano(j.body.disponible, true);
+    if (disponible === undefined) {
+      return NextResponse.json({ error: 'Revisá los datos', errores: { disponible: 'Tiene que ser verdadero o falso' } }, { status: 400 });
+    }
     const { rowCount } = await pool.query(
       `UPDATE public.propiedades SET disponible=$1, actualizado_en=now() WHERE id=$2`,
-      [!!disponible, params.id]
+      [disponible, id]
     );
     if (!rowCount) return NextResponse.json({ error: 'No existe' }, { status: 404 });
-    return NextResponse.json({ ok: true, disponible: !!disponible });
+    return NextResponse.json({ ok: true, disponible });
   } catch (err) {
     console.error('Error cambiando disponibilidad:', err);
     return NextResponse.json({ error: 'No se pudo cambiar el estado' }, { status: 500 });

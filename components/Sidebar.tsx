@@ -16,11 +16,12 @@ import {
 } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
 
-const NAV = [
+// badge: sufijo visible junto al número + texto del tooltip, para que se entienda qué cuenta.
+const NAV: { href: string; label: string; icon: string; badge?: { sufijo?: string; ayuda: (n: number) => string } }[] = [
   { href: '/', label: 'Resumen', icon: 'dashboard' },
-  { href: '/propiedades', label: 'Propiedades', icon: 'real_estate_agent' },
-  { href: '/visitas', label: 'Calendario de visitas', icon: 'calendar_month' },
-  { href: '/chats', label: 'Chats del bot', icon: 'forum' },
+  { href: '/propiedades', label: 'Propiedades', icon: 'real_estate_agent', badge: { ayuda: (n) => `${n} propiedades disponibles` } },
+  { href: '/visitas', label: 'Calendario de visitas', icon: 'calendar_month', badge: { ayuda: (n) => `${n} visitas confirmadas para hoy` } },
+  { href: '/chats', label: 'Chats del bot', icon: 'forum', badge: { ayuda: (n) => `${n} conversaciones con el bot` } },
   { href: '/asesores', label: 'Equipo de asesores', icon: 'badge' },
 ];
 
@@ -76,12 +77,15 @@ export default function AppSidebar({ counts = {} }: { counts?: Record<string, nu
                   </SidebarMenuButton>
                   {n != null && n > 0 && (
                     <SidebarMenuBadge
+                      title={item.badge?.ayuda(n)}
+                      aria-label={item.badge?.ayuda(n)}
                       className={cn(
-                        'text-sidebar-foreground',
+                        'gap-1 text-sidebar-foreground',
                         hot && !active && 'bg-sidebar-primary text-sidebar-primary-foreground'
                       )}
                     >
                       {n}
+                      {item.badge?.sufijo && <span className="font-normal opacity-70">{item.badge.sufijo}</span>}
                     </SidebarMenuBadge>
                   )}
                 </SidebarMenuItem>
