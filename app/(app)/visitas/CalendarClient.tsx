@@ -7,6 +7,7 @@ import dayGridPlugin from '@fullcalendar/daygrid';
 import listPlugin from '@fullcalendar/list';
 import interactionPlugin from '@fullcalendar/interaction';
 import { cn } from '@/lib/utils';
+import { telefonoLocal, formatearTelefono } from '@/lib/asesores';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -25,27 +26,38 @@ type Visita = {
   estado: string;
 };
 
+// El color de cada visita indica SOLO su estado. El día de hoy ya se distingue por la celda resaltada del calendario.
 const COLORS: Record<string, { bg: string; border: string; text: string }> = {
   confirmada: { bg: '#E7EAED', border: '#0F1E2A', text: '#0F1E2A' },
-  hoy: { bg: '#FDE6DB', border: '#F26B3A', text: '#B8441A' },
   cancelada: { bg: '#EEF0F2', border: '#C7CCD1', text: '#6B7280' },
-  pendiente: { bg: '#FDE6DB', border: '#F0B79A', text: '#8F3212' },
+  pendiente: { bg: '#FEF3C7', border: '#EAB308', text: '#854D0E' },
 };
-const colorDe = (estado: string, esHoy = false) =>
-  esHoy && estado !== 'cancelada' ? COLORS.hoy : COLORS[estado] ?? COLORS.pendiente;
+const colorDe = (estado: string) => COLORS[estado] ?? COLORS.pendiente;
 const inicial = (n: string | null) => (n?.trim()?.[0] ?? '?').toUpperCase();
+
+// "2026-11-11" → "miércoles 11/11/2026" (mediodía para que la zona horaria no corra el día).
+const fechaLarga = (iso: string) => {
+  const d = new Date(`${iso}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return `${d.toLocaleDateString('es-AR', { weekday: 'long' })} ${d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })}`;
+};
+// "5491144556677" → "+54 9 11 4455-6677"; si no es un celular argentino, se muestra tal cual.
+const telefonoLegible = (tel: string | null) => {
+  if (!tel) return '—';
+  const local = telefonoLocal(tel);
+  return local.length === 10 ? `+54 9 ${formatearTelefono(local)}` : tel;
+};
 
 const LEYENDA = [
   { k: 'Confirmada', c: '#0F1E2A' },
-  { k: 'Hoy', c: '#F26B3A' },
-  { k: 'Pendiente', c: '#FDE6DB' },
+  { k: 'Pendiente', c: '#EAB308' },
   { k: 'Cancelada', c: '#C7CCD1' },
 ];
 
 const ESTADO_BADGE: Record<string, string> = {
   confirmada: 'bg-secondary text-white',
   reprogramada: 'bg-accent text-accent-foreground',
-  pendiente: 'bg-accent text-accent-foreground',
+  pendiente: 'bg-yellow-100 text-yellow-800',
   cancelada: 'bg-muted text-muted-foreground',
 };
 
@@ -77,7 +89,7 @@ export default function CalendarClient({ visitas }: { visitas: Visita[] }) {
     new Date(`${d}T00:00:00`).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
 
   const events = visitas.map((v) => {
-    const c = colorDe(v.estado, v.fecha_visita === hoy);
+    const c = colorDe(v.estado);
     return {
       id: String(v.id),
       title: `${v.hora_visita?.slice(0, 5) ?? ''} · ${v.propiedad_titulo ?? 'Visita'}`,
@@ -140,7 +152,7 @@ export default function CalendarClient({ visitas }: { visitas: Visita[] }) {
             <div className="mt-4 flex flex-wrap gap-4 border-t border-muted pt-4">
               {LEYENDA.map((l) => (
                 <span key={l.k} className="inline-flex items-center gap-2 text-[13px] font-semibold text-muted-foreground">
-                  <span className="size-2.5 rounded-full" style={{ background: l.c, border: l.c === '#FDE6DB' ? '1px solid #F0B79A' : undefined }} />
+                  <span className="size-2.5 rounded-full" style={{ background: l.c }} />
                   {l.k}
                 </span>
               ))}
@@ -226,8 +238,8 @@ export default function CalendarClient({ visitas }: { visitas: Visita[] }) {
 
                 <dl className="flex flex-col gap-3.5">
                   <Row t="Propiedad" d={sel.propiedad_titulo || '—'} />
-                  <Row t="Fecha y hora" d={`${sel.fecha_visita} · ${sel.hora_visita?.slice(0, 5)} hs`} />
-                  <Row t="Teléfono" d={sel.telefono || '—'} />
+                  <Row t="Fecha y hora" d={`${fechaLarga(sel.fecha_visita)} · ${sel.hora_visita?.slice(0, 5)} hs`} />
+                  <Row t="Teléfono" d={telefonoLegible(sel.telefono)} />
                   {sel.notas && <Row t="Notas" d={sel.notas} />}
                 </dl>
 

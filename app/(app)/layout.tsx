@@ -12,7 +12,7 @@ async function getNavCounts() {
     const { rows } = await pool.query(`
       SELECT
         (SELECT COUNT(*) FROM public.propiedades WHERE disponible) AS propiedades,
-        (SELECT COUNT(*) FROM public.visitas_programadas WHERE estado='confirmada' AND fecha_visita=CURRENT_DATE) AS visitas_hoy,
+        (SELECT COUNT(*) FROM public.visitas_programadas WHERE estado<>'cancelada' AND fecha_visita=CURRENT_DATE) AS visitas_hoy,
         (SELECT COUNT(DISTINCT session_id) FROM public.conversaciones_inmobiliaria) AS chats,
         (SELECT COUNT(*) FROM public.derivaciones WHERE estado='pendiente') AS derivaciones
     `);

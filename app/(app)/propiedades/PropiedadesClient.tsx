@@ -62,7 +62,7 @@ const TIPO_LABEL: Record<string, string> = {
 const ESTADO_BADGE: Record<string, string> = {
   confirmada: 'bg-secondary text-white',
   reprogramada: 'bg-accent text-accent-foreground',
-  pendiente: 'bg-accent text-accent-foreground',
+  pendiente: 'bg-yellow-100 text-yellow-800',
   cancelada: 'bg-muted text-muted-foreground',
 };
 

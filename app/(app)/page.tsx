@@ -72,16 +72,16 @@ async function getData() {
         (SELECT COUNT(*) FROM public.propiedades WHERE disponible AND operacion LIKE 'alquiler%') AS prop_alquiler,
         (SELECT COUNT(*) FROM public.propiedades WHERE disponible AND operacion='venta') AS prop_venta,
         (SELECT COUNT(*) FROM public.propiedades WHERE disponible AND destacado) AS prop_destacadas,
-        (SELECT COUNT(*) FROM public.visitas_programadas WHERE estado='confirmada' AND fecha_visita=CURRENT_DATE) AS visitas_hoy,
-        (SELECT COUNT(*) FROM public.visitas_programadas WHERE estado='confirmada' AND fecha_visita>=CURRENT_DATE) AS visitas_prox,
+        (SELECT COUNT(*) FROM public.visitas_programadas WHERE estado<>'cancelada' AND fecha_visita=CURRENT_DATE) AS visitas_hoy,
+        (SELECT COUNT(*) FROM public.visitas_programadas WHERE estado<>'cancelada' AND fecha_visita>=CURRENT_DATE) AS visitas_prox,
         (SELECT COUNT(DISTINCT session_id) FROM public.conversaciones_inmobiliaria) AS conversaciones,
         (SELECT COUNT(*) FROM public.derivaciones WHERE estado='pendiente') AS derivaciones
     `),
     pool.query(`
-      SELECT nombre_cliente, telefono, propiedad_titulo,
+      SELECT nombre_cliente, telefono, propiedad_titulo, estado,
              to_char(fecha_visita,'DD/MM') AS fecha, to_char(hora_visita,'HH24:MI') AS hora
       FROM public.visitas_programadas
-      WHERE estado='confirmada' AND fecha_visita >= CURRENT_DATE
+      WHERE estado<>'cancelada' AND fecha_visita >= CURRENT_DATE
       ORDER BY fecha_visita ASC, hora_visita ASC LIMIT 6
     `),
     pool.query(`
@@ -168,7 +168,8 @@ export default async function HomePage() {
           </p>
         )}
         <div className="mt-6 flex flex-wrap gap-3">
-          <Button render={<Link href="/visitas?dia=hoy" />} className="bg-white text-secondary hover:bg-white/90">
+          <Button render={<Link href="/visitas?dia=hoy" />}>
+            <span className="material-symbols-outlined">calendar_month</span>
             Ver agenda de hoy
           </Button>
           {derivaciones > 0 && (
@@ -245,10 +246,10 @@ export default async function HomePage() {
         <Card>
           <CardHeader>
             <CardTitle className="font-display text-2xl tracking-[-0.02em]">Próximas visitas</CardTitle>
-            <CardDescription>Agenda confirmada de los próximos días.</CardDescription>
+            <CardDescription>Agenda de los próximos días (confirmadas y pendientes).</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col">
-            {visitas.length === 0 && <div className="py-3.5 text-sm text-muted-foreground">No hay visitas próximas confirmadas.</div>}
+            {visitas.length === 0 && <div className="py-3.5 text-sm text-muted-foreground">No hay visitas próximas.</div>}
             {visitas.map((v, i) => {
               const fb = fechaBlock(v.fecha);
               const wa = waLink(v.telefono);
@@ -267,7 +268,12 @@ export default async function HomePage() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[14.5px] font-semibold">{v.propiedad_titulo || 'Visita'}</div>
-                    <div className="mt-0.5 text-[13px] text-muted-foreground">{v.nombre_cliente || 'Sin nombre'} · {v.hora} hs</div>
+                    <div className="mt-0.5 flex items-center gap-2 text-[13px] text-muted-foreground">
+                      <span className="truncate">{v.nombre_cliente || 'Sin nombre'} · {v.hora} hs</span>
+                      {v.estado === 'pendiente' && (
+                        <Badge className="shrink-0 border-transparent bg-yellow-100 text-yellow-800">Pendiente</Badge>
+                      )}
+                    </div>
                   </div>
                   {wa && (
                     <Button

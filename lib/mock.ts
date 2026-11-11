@@ -205,7 +205,7 @@ export function mensajesClientes(): Row[] {
 export function navCounts(): Row {
   return {
     propiedades: disp().length,
-    visitas_hoy: visitas.filter((v) => v.estado === 'confirmada' && v.fecha_visita === dayISO(0)).length,
+    visitas_hoy: visitas.filter((v) => v.estado !== 'cancelada' && v.fecha_visita === dayISO(0)).length,
     chats: new Set(conversaciones.map((c) => c.user_id)).size,
     derivaciones: derivacionesPendientes(),
   };
@@ -218,8 +218,8 @@ export function homeKpis(): Row {
     prop_alquiler: d.filter((p) => String(p.operacion).startsWith('alquiler')).length,
     prop_venta: d.filter((p) => p.operacion === 'venta').length,
     prop_destacadas: d.filter((p) => p.destacado).length,
-    visitas_hoy: visitas.filter((v) => v.estado === 'confirmada' && v.fecha_visita === dayISO(0)).length,
-    visitas_prox: visitas.filter((v) => v.estado === 'confirmada' && (v.fecha_visita as string) >= dayISO(0)).length,
+    visitas_hoy: visitas.filter((v) => v.estado !== 'cancelada' && v.fecha_visita === dayISO(0)).length,
+    visitas_prox: visitas.filter((v) => v.estado !== 'cancelada' && (v.fecha_visita as string) >= dayISO(0)).length,
     conversaciones: new Set(conversaciones.map((c) => c.user_id)).size,
     derivaciones: derivacionesPendientes(),
   };
@@ -227,10 +227,10 @@ export function homeKpis(): Row {
 
 export function proximasVisitas(n: number): Row[] {
   return visitas
-    .filter((v) => v.estado === 'confirmada' && (v.fecha_visita as string) >= dayISO(0))
+    .filter((v) => v.estado !== 'cancelada' && (v.fecha_visita as string) >= dayISO(0))
     .sort((a, b) => String(a.fecha_visita + String(a.hora_visita)).localeCompare(String(b.fecha_visita) + String(b.hora_visita)))
     .slice(0, n)
-    .map((v) => ({ nombre_cliente: v.nombre_cliente, telefono: v.telefono, propiedad_titulo: v.propiedad_titulo, fecha: ddmm(v.fecha_visita as string), hora: hhmm(v.hora_visita as string) }));
+    .map((v) => ({ nombre_cliente: v.nombre_cliente, telefono: v.telefono, propiedad_titulo: v.propiedad_titulo, estado: v.estado, fecha: ddmm(v.fecha_visita as string), hora: hhmm(v.hora_visita as string) }));
 }
 
 function ultimosPorUsuario(): Row[] {

@@ -85,7 +85,11 @@ body {
   font-size: 15px;
   -webkit-font-smoothing: antialiased;
 }
-a { color: inherit; text-decoration: none; }
+/* En @layer base: fuera de una capa, esta regla le ganaba a las utilidades de Tailwind (text-*)
+   y los botones renderizados como <a> perdían su color de texto (quedaban invisibles). */
+@layer base {
+  a { color: inherit; text-decoration: none; }
+}
 .content { min-width: 0; }
 
 .material-symbols-outlined {

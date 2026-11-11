@@ -20,7 +20,7 @@ import { cn } from '@/lib/utils';
 const NAV: { href: string; label: string; icon: string; badge?: { sufijo?: string; ayuda: (n: number) => string } }[] = [
   { href: '/', label: 'Resumen', icon: 'dashboard' },
   { href: '/propiedades', label: 'Propiedades', icon: 'real_estate_agent', badge: { ayuda: (n) => `${n} propiedades disponibles` } },
-  { href: '/visitas', label: 'Calendario de visitas', icon: 'calendar_month', badge: { ayuda: (n) => `${n} visitas confirmadas para hoy` } },
+  { href: '/visitas', label: 'Calendario de visitas', icon: 'calendar_month', badge: { ayuda: (n) => `${n} visitas para hoy (confirmadas y pendientes)` } },
   { href: '/chats', label: 'Chats del bot', icon: 'forum', badge: { ayuda: (n) => `${n} conversaciones con el bot` } },
   { href: '/asesores', label: 'Equipo de asesores', icon: 'badge' },
 ];
